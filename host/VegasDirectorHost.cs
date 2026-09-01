@@ -631,14 +631,15 @@ public class EntryPoint
         switch (name.Trim().ToLowerInvariant())
         {
             case "volume": return EnvelopeType.Volume;
+            case "composite":
             case "compositelevel":
             case "composite_level":
-            case "opacity": return EnvelopeType.CompositeLevel;
+            case "opacity": return EnvelopeType.Composite; // video track composite level
             case "pan": return EnvelopeType.Pan;
-            case "fadein":
-            case "fade_in": return EnvelopeType.FadeIn;
-            case "fadeout":
-            case "fade_out": return EnvelopeType.FadeOut;
+            case "fadetocolor":
+            case "fade_to_color": return EnvelopeType.FadeToColor;
+            case "mute": return EnvelopeType.Mute;
+            // FadeIn/FadeOut are TrackEvent.Fade* properties, not EnvelopeType
             default: return null;
         }
     }
@@ -829,7 +830,7 @@ public class EntryPoint
         try
         {
             // Magix FAQ: individual event opacity via FadeIn.Gain
-            ve.FadeIn.Gain = opacity;
+            ve.FadeIn.Gain = (float)opacity;
             return RpcResponse.Result(req.Id,
                 "{\"ok\":true,\"opacity\":" + Json.Num(opacity) + "}");
         }
@@ -1017,12 +1018,12 @@ public class EntryPoint
                 }
                 if (existing != null)
                 {
-                    existing.Y = value;
+                    existing.Y = (float)value;
                     try { existing.Curve = curve; } catch { }
                 }
                 else
                 {
-                    EnvelopePoint pt = new EnvelopePoint(SecondsToTimecode(at), value, curve);
+                    EnvelopePoint pt = new EnvelopePoint(SecondsToTimecode(at), (float)value, curve);
                     envelope.Points.Add(pt);
                 }
                 added++;
