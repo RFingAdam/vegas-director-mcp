@@ -715,19 +715,60 @@ public class EntryPoint
         }
     }
 
-    private void ApplyMotionKeyframe(VideoMotionKeyframe key, double scale, double panX, double panY,
+    private void GetMediaSize(VideoEvent ve, out int w, out int h)
+    {
+        w = myVegas.Project.Video.Width;
+        h = myVegas.Project.Video.Height;
+        try
+        {
+            Take take = ve.ActiveTake;
+            if (take != null && take.Media != null)
+            {
+                MediaStream ms = take.Media.Streams.GetItemByMediaType(MediaType.Video, 0);
+                VideoStream vs = ms as VideoStream;
+                if (vs != null && vs.Width > 0 && vs.Height > 0)
+                {
+                    w = vs.Width;
+                    h = vs.Height;
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void ApplyMotionKeyframe(VideoMotionKeyframe key, VideoEvent ve, double scale, double panX, double panY,
                                      string typeName, double smoothness)
     {
-        if (scale <= 0) scale = 1.0;
-        // scale 1.0 = identity; 1.4 = ~40% zoom-in via smaller crop window
-        float sx = (float)(1.0 / scale);
-        float sy = (float)(1.0 / scale);
-        key.ScaleBy(new VideoMotionVertex(sx, sy));
-        int pw = myVegas.Project.Video.Width;
-        int ph = myVegas.Project.Video.Height;
-        float dx = (float)(pw * 0.35 * panX);
-        float dy = (float)(ph * 0.35 * panY);
-        key.MoveBy(new VideoMotionVertex(dx, dy));
+        // Real Event Pan/Crop zoom: shrink the SOURCE crop rectangle so the output
+        // still fills the frame (no black gaps). ScaleBy+MoveBy was translating the
+        // whole picture on the canvas — Adam's red-arrow bug.
+        if (scale < 1.0) scale = 1.0;
+        if (scale > 3.0) scale = 3.0;
+
+        int w, h;
+        GetMediaSize(ve, out w, out h);
+
+        double cropW = w / scale;
+        double cropH = h / scale;
+        double maxX = Math.Max(0.0, w - cropW);
+        double maxY = Math.Max(0.0, h - cropH);
+        // pan -1..1: -1 = top/left edge of source, 0 = centered, +1 = bottom/right
+        double left = maxX * (panX + 1.0) * 0.5;
+        double top = maxY * (panY + 1.0) * 0.5;
+        if (left < 0) left = 0;
+        if (top < 0) top = 0;
+        if (left > maxX) left = maxX;
+        if (top > maxY) top = maxY;
+
+        float l = (float)left;
+        float tp = (float)top;
+        float r = (float)(left + cropW);
+        float b = (float)(top + cropH);
+        key.Bounds = new VideoMotionBounds(
+            new VideoMotionVertex(l, tp),
+            new VideoMotionVertex(r, tp),
+            new VideoMotionVertex(r, b),
+            new VideoMotionVertex(l, b));
 
         // Magix temporal interpolation (Smooth/Fast/Slow/Hold/…) + spatial Smoothness
         try { key.Type = ParseVideoKeyframeType(typeName, VideoKeyframeType.Smooth); } catch { }
@@ -779,7 +820,7 @@ public class EntryPoint
                     key = new VideoMotionKeyframe(SecondsToTimecode(at));
                     ve.VideoMotion.Keyframes.Add(key);
                 }
-                ApplyMotionKeyframe(key, scale, panX, panY, typeName, smoothness);
+                ApplyMotionKeyframe(key, ve, scale, panX, panY, typeName, smoothness);
                 added++;
             }
             return RpcResponse.Result(req.Id,
