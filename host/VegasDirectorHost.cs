@@ -1,56 +1,50 @@
-// VegasDirectorHost.cs
-//
-// VEGAS Pro script that starts a local JSON-RPC listener so an external
-// process (the vegas-director-mcp Python MCP server) can drive the running
-// VEGAS instance via its scripting API.
-//
-// Install: copy into your VEGAS Script Menu folder, then run via
-// Tools > Scripting > VegasDirectorHost inside VEGAS.
-//
-// IMPORTANT: all ScriptPortal.Vegas API calls MUST happen on VEGAS's UI
-// thread. The pipe listener runs on a background thread; every handler
-// marshals back onto the UI thread via Vegas.Invoke(...) before touching
-// any Vegas.* object. Skipping this is the #1 cause of native crashes when
-// scripting VEGAS from an async/threaded context.
+// VegasDirectorHost.cs — VEGAS Pro 22 script host for vegas-director-mcp
+// Install: copy to Script Menu, run Tools > Scripting > VegasDirectorHost
+// All ScriptPortal.Vegas calls run on the UI thread via Vegas.Invoke.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.Windows.Forms;
 using ScriptPortal.Vegas;
-
-// Minimal hand-rolled JSON handling is used here deliberately: VEGAS's
-// scripting host targets an older .NET Framework profile that may not have
-// a modern JSON library available out of the box. Swap for
-// System.Text.Json or Newtonsoft if your VEGAS scripting runtime supports
-// it -- see docs/SETUP.md for how to check your version.
 
 public class EntryPoint
 {
     private const string PipeName = "vegas-director";
+    private const int TcpPort = 8752;
     private Vegas myVegas;
     private volatile bool running = true;
 
     public void FromVegas(Vegas vegas)
     {
         myVegas = vegas;
-        Log("VegasDirectorHost starting, pipe name: " + PipeName);
+        Log("VegasDirectorHost starting. pipe=" + PipeName + " tcp=127.0.0.1:" + TcpPort);
 
-        Thread listenerThread = new Thread(RunListener);
-        listenerThread.IsBackground = true;
-        listenerThread.Start();
+        Thread pipeThread = new Thread(RunPipeListener);
+        pipeThread.IsBackground = true;
+        pipeThread.Start();
+
+        Thread tcpThread = new Thread(RunTcpListener);
+        tcpThread.IsBackground = true;
+        tcpThread.Start();
 
         MessageBox.Show(
-            "vegas-director-mcp host is running.\n\nPipe: \\\\.\\pipe\\" + PipeName +
-            "\n\nLeave this script running while you want external control. " +
-            "Closing this dialog stops the listener.",
+            "vegas-director-mcp host is running.\n\n" +
+            "Named pipe: \\\\.\\pipe\\" + PipeName + "\n" +
+            "TCP: 127.0.0.1:" + TcpPort + "\n\n" +
+            "Leave this dialog open while you want external control.\n" +
+            "Closing it stops the listeners.",
             "vegas-director-mcp");
 
         running = false;
     }
 
-    private void RunListener()
+    private void RunPipeListener()
     {
         while (running)
         {
@@ -61,44 +55,75 @@ public class EntryPoint
                     PipeTransmissionMode.Byte, PipeOptions.Asynchronous))
                 {
                     pipe.WaitForConnection();
-                    Log("Client connected.");
-                    HandleConnection(pipe);
+                    Log("Pipe client connected.");
+                    HandleStream(pipe);
                 }
             }
             catch (Exception ex)
             {
-                Log("Listener error: " + ex.Message);
-                Thread.Sleep(1000);
+                if (!running) break;
+                Log("Pipe listener error: " + ex.Message);
+                Thread.Sleep(500);
             }
         }
     }
 
-    private void HandleConnection(NamedPipeServerStream pipe)
+    private void RunTcpListener()
     {
-        StreamReader reader = new StreamReader(pipe, Encoding.UTF8);
-        StreamWriter writer = new StreamWriter(pipe, Encoding.UTF8);
-        writer.AutoFlush = true;
-
-        while (pipe.IsConnected)
+        TcpListener listener = null;
+        try
         {
-            string line = reader.ReadLine();
-            if (line == null) break;
-
-            string response = Dispatch(line);
-            writer.WriteLine(response);
+            listener = new TcpListener(IPAddress.Loopback, TcpPort);
+            listener.Start();
+            Log("TCP listening on 127.0.0.1:" + TcpPort);
+            while (running)
+            {
+                if (!listener.Pending())
+                {
+                    Thread.Sleep(50);
+                    continue;
+                }
+                TcpClient client = listener.AcceptTcpClient();
+                Log("TCP client connected.");
+                using (client)
+                using (NetworkStream stream = client.GetStream())
+                {
+                    HandleStream(stream);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log("TCP listener error: " + ex.Message);
+        }
+        finally
+        {
+            if (listener != null) listener.Stop();
         }
     }
 
-    // Dispatch is intentionally simple/explicit rather than reflection-based
-    // -- keeps the RPC surface auditable and matches docs/PROTOCOL.md's
-    // method table one-to-one as it grows.
+    private void HandleStream(Stream stream)
+    {
+        StreamReader reader = new StreamReader(stream, Encoding.UTF8);
+        StreamWriter writer = new StreamWriter(stream, Encoding.UTF8);
+        writer.AutoFlush = true;
+        while (true)
+        {
+            string line;
+            try { line = reader.ReadLine(); }
+            catch { break; }
+            if (line == null) break;
+            if (line.Trim().Length == 0) continue;
+            string response = Dispatch(line);
+            try { writer.WriteLine(response); }
+            catch { break; }
+        }
+    }
+
     private string Dispatch(string requestJson)
     {
         RpcRequest req;
-        try
-        {
-            req = RpcRequest.Parse(requestJson);
-        }
+        try { req = RpcRequest.Parse(requestJson); }
         catch (Exception ex)
         {
             return RpcResponse.Error(null, -32700, "Parse error: " + ex.Message);
@@ -110,17 +135,32 @@ public class EntryPoint
             {
                 case "project.get_state":
                     return InvokeOnUiThread(req, GetProjectState);
-
-                // Additional methods land here as they're implemented --
-                // see docs/API_COVERAGE.md for the full planned surface
-                // (track.*, event.*, media.*, fx.*, envelope.*, render.*).
-                // Each new case should follow the same InvokeOnUiThread
-                // pattern -- never call myVegas.* directly from this
-                // (background-thread) method body.
-
+                case "project.save":
+                    return InvokeOnUiThread(req, SaveProject);
+                case "track.add":
+                    return InvokeOnUiThread(req, AddTrack);
+                case "media.import":
+                    return InvokeOnUiThread(req, ImportMedia);
+                case "event.add_video":
+                    return InvokeOnUiThread(req, AddVideoEvent);
+                case "event.add_audio":
+                    return InvokeOnUiThread(req, AddAudioEvent);
+                case "event.trim":
+                    return InvokeOnUiThread(req, TrimEvent);
+                case "event.move":
+                    return InvokeOnUiThread(req, MoveEvent);
+                case "event.delete":
+                    return InvokeOnUiThread(req, DeleteEvent);
+                case "transport.play":
+                    return InvokeOnUiThread(req, TransportPlay);
+                case "transport.stop":
+                    return InvokeOnUiThread(req, TransportStop);
+                case "transport.seek":
+                    return InvokeOnUiThread(req, TransportSeek);
+                case "ping":
+                    return RpcResponse.Result(req.Id, "{\"ok\":true,\"host\":\"vegas-director\"}");
                 default:
-                    return RpcResponse.Error(req.Id, -32601,
-                        "Method not found: " + req.Method);
+                    return RpcResponse.Error(req.Id, -32601, "Method not found: " + req.Method);
             }
         }
         catch (Exception ex)
@@ -133,51 +173,339 @@ public class EntryPoint
     {
         string result = null;
         Exception thrown = null;
-
-        myVegas.Invoke(new MethodInvoker(delegate
+        myVegas.Invoke((MethodInvoker)delegate
         {
             try { result = handler(req); }
             catch (Exception ex) { thrown = ex; }
-        }));
-
+        });
         if (thrown != null)
             return RpcResponse.Error(req.Id, -32603, thrown.Message);
         return result;
     }
 
-    // --- Handlers (run on UI thread) ---
-
-    private string GetProjectState(RpcRequest req)
+    private Project RequireProject(RpcRequest req)
     {
         Project project = myVegas.Project;
         if (project == null)
-            return RpcResponse.Error(req.Id, -32001, "No active VEGAS project");
+            throw new Exception("No active VEGAS project");
+        return project;
+    }
 
-        int videoTracks = 0, audioTracks = 0;
-        foreach (Track t in project.Tracks)
+    private static double TimecodeToSeconds(Timecode tc)
+    {
+        // VEGAS Timecode: 1 second = 10000000 ticks (100ns units) on most builds.
+        try { return tc.ToMilliseconds() / 1000.0; }
+        catch
         {
+            long ticks;
+            if (long.TryParse(tc.ToString(), out ticks))
+                return ticks / 10000000.0;
+            return 0;
+        }
+    }
+
+    private static Timecode SecondsToTimecode(double seconds)
+    {
+        return Timecode.FromSeconds(seconds);
+    }
+
+    private string GetProjectState(RpcRequest req)
+    {
+        Project project = RequireProject(req);
+        StringBuilder tracks = new StringBuilder();
+        tracks.Append("[");
+        int videoTracks = 0, audioTracks = 0;
+        bool first = true;
+        for (int i = 0; i < project.Tracks.Count; i++)
+        {
+            Track t = project.Tracks[i];
+            string kind = t.IsVideo() ? "video" : (t.IsAudio() ? "audio" : "other");
             if (t.IsVideo()) videoTracks++;
             if (t.IsAudio()) audioTracks++;
+            if (!first) tracks.Append(",");
+            first = false;
+            tracks.Append("{\"index\":").Append(i)
+                  .Append(",\"name\":").Append(Json.Str(t.Name))
+                  .Append(",\"type\":").Append(Json.Str(kind))
+                  .Append(",\"event_count\":").Append(t.Events.Count)
+                  .Append("}");
         }
+        tracks.Append("]");
+
+        StringBuilder events = new StringBuilder();
+        events.Append("[");
+        first = true;
+        for (int ti = 0; ti < project.Tracks.Count; ti++)
+        {
+            Track t = project.Tracks[ti];
+            for (int ei = 0; ei < t.Events.Count; ei++)
+            {
+                TrackEvent ev = t.Events[ei];
+                if (!first) events.Append(",");
+                first = false;
+                events.Append("{\"track_index\":").Append(ti)
+                      .Append(",\"event_index\":").Append(ei)
+                      .Append(",\"start_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.Start)))
+                      .Append(",\"length_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.Length)))
+                      .Append("}");
+            }
+        }
+        events.Append("]");
 
         StringBuilder sb = new StringBuilder();
-        sb.Append("{\"length_ticks\":").Append(project.Length.ToString())
+        sb.Append("{\"ok\":true")
+          .Append(",\"length_seconds\":").Append(Json.Num(TimecodeToSeconds(project.Length)))
           .Append(",\"video_track_count\":").Append(videoTracks)
           .Append(",\"audio_track_count\":").Append(audioTracks)
+          .Append(",\"tracks\":").Append(tracks)
+          .Append(",\"events\":").Append(events)
           .Append("}");
-
         return RpcResponse.Result(req.Id, sb.ToString());
+    }
+
+    private string SaveProject(RpcRequest req)
+    {
+        string path = Json.GetString(req.ParamsJson, "path");
+        if (path != null && path.Length > 0)
+            myVegas.SaveProject(path);
+        else
+            myVegas.SaveProject();
+        return RpcResponse.Result(req.Id, "{\"ok\":true}");
+    }
+
+    private string AddTrack(RpcRequest req)
+    {
+        Project project = RequireProject(req);
+        string type = (Json.GetString(req.ParamsJson, "type") ?? "video").ToLowerInvariant();
+        string name = Json.GetString(req.ParamsJson, "name") ?? "";
+        int index = project.Tracks.Count;
+        if (type == "audio")
+        {
+            AudioTrack at = new AudioTrack(project, index, name);
+            project.Tracks.Add(at);
+        }
+        else
+        {
+            VideoTrack vt = new VideoTrack(project, index, name);
+            project.Tracks.Add(vt);
+        }
+        return RpcResponse.Result(req.Id,
+            "{\"ok\":true,\"track_index\":" + index + ",\"type\":" + Json.Str(type) + "}");
+    }
+
+    private string ImportMedia(RpcRequest req)
+    {
+        Project project = RequireProject(req);
+        string path = Json.GetString(req.ParamsJson, "path");
+        if (path == null || path.Length == 0)
+            return RpcResponse.Error(req.Id, -32602, "params.path required");
+        if (!File.Exists(path))
+            return RpcResponse.Error(req.Id, -32003, "Media file not found: " + path);
+
+        Media media = new Media(path);
+        project.MediaPool.Add(media);
+
+        double len = 0;
+        bool hasVideo = media.HasVideo();
+        bool hasAudio = media.HasAudio();
+        if (hasVideo && media.Streams.Count > 0)
+            len = TimecodeToSeconds(media.Length);
+        else if (hasAudio)
+            len = TimecodeToSeconds(media.Length);
+
+        StringBuilder sb = new StringBuilder();
+        sb.Append("{\"ok\":true")
+          .Append(",\"path\":").Append(Json.Str(path))
+          .Append(",\"length_seconds\":").Append(Json.Num(len))
+          .Append(",\"has_video\":").Append(hasVideo ? "true" : "false")
+          .Append(",\"has_audio\":").Append(hasAudio ? "true" : "false")
+          .Append("}");
+        return RpcResponse.Result(req.Id, sb.ToString());
+    }
+
+    private Media FindMediaByPath(Project project, string path)
+    {
+        string full = Path.GetFullPath(path);
+        foreach (Media m in project.MediaPool)
+        {
+            try
+            {
+                if (string.Equals(Path.GetFullPath(m.FilePath), full, StringComparison.OrdinalIgnoreCase))
+                    return m;
+            }
+            catch { }
+        }
+        return null;
+    }
+
+    private string AddVideoEvent(RpcRequest req)
+    {
+        Project project = RequireProject(req);
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", 0);
+        double start = Json.GetDouble(req.ParamsJson, "start_seconds", 0);
+        double length = Json.GetDouble(req.ParamsJson, "length_seconds", -1);
+        string path = Json.GetString(req.ParamsJson, "media_path");
+        if (path == null || path.Length == 0)
+            return RpcResponse.Error(req.Id, -32602, "params.media_path required");
+
+        if (trackIndex < 0 || trackIndex >= project.Tracks.Count || !project.Tracks[trackIndex].IsVideo())
+            return RpcResponse.Error(req.Id, -32002, "Invalid video track_index");
+
+        Media media = FindMediaByPath(project, path);
+        if (media == null)
+        {
+            if (!File.Exists(path))
+                return RpcResponse.Error(req.Id, -32003, "Media file not found: " + path);
+            media = new Media(path);
+            project.MediaPool.Add(media);
+        }
+        if (!media.HasVideo())
+            return RpcResponse.Error(req.Id, -32003, "Media has no video stream");
+
+        if (length < 0)
+            length = TimecodeToSeconds(media.Length);
+
+        VideoTrack vtrack = (VideoTrack)project.Tracks[trackIndex];
+        VideoEvent ve = vtrack.AddVideoEvent(SecondsToTimecode(start), SecondsToTimecode(length));
+        MediaStream stream = media.GetVideoStreamByIndex(0);
+        ve.AddTake(stream);
+
+        int eventIndex = vtrack.Events.Count - 1;
+        StringBuilder sb = new StringBuilder();
+        sb.Append("{\"ok\":true")
+          .Append(",\"track_index\":").Append(trackIndex)
+          .Append(",\"event_index\":").Append(eventIndex)
+          .Append(",\"start_seconds\":").Append(Json.Num(start))
+          .Append(",\"length_seconds\":").Append(Json.Num(length))
+          .Append("}");
+        return RpcResponse.Result(req.Id, sb.ToString());
+    }
+
+    private string AddAudioEvent(RpcRequest req)
+    {
+        Project project = RequireProject(req);
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", 0);
+        double start = Json.GetDouble(req.ParamsJson, "start_seconds", 0);
+        double length = Json.GetDouble(req.ParamsJson, "length_seconds", -1);
+        string path = Json.GetString(req.ParamsJson, "media_path");
+        if (path == null || path.Length == 0)
+            return RpcResponse.Error(req.Id, -32602, "params.media_path required");
+
+        if (trackIndex < 0 || trackIndex >= project.Tracks.Count || !project.Tracks[trackIndex].IsAudio())
+            return RpcResponse.Error(req.Id, -32002, "Invalid audio track_index");
+
+        Media media = FindMediaByPath(project, path);
+        if (media == null)
+        {
+            if (!File.Exists(path))
+                return RpcResponse.Error(req.Id, -32003, "Media file not found: " + path);
+            media = new Media(path);
+            project.MediaPool.Add(media);
+        }
+        if (!media.HasAudio())
+            return RpcResponse.Error(req.Id, -32003, "Media has no audio stream");
+
+        if (length < 0)
+            length = TimecodeToSeconds(media.Length);
+
+        AudioTrack atrack = (AudioTrack)project.Tracks[trackIndex];
+        AudioEvent ae = atrack.AddAudioEvent(SecondsToTimecode(start), SecondsToTimecode(length));
+        MediaStream stream = media.GetAudioStreamByIndex(0);
+        ae.AddTake(stream);
+
+        int eventIndex = atrack.Events.Count - 1;
+        StringBuilder sb = new StringBuilder();
+        sb.Append("{\"ok\":true")
+          .Append(",\"track_index\":").Append(trackIndex)
+          .Append(",\"event_index\":").Append(eventIndex)
+          .Append(",\"start_seconds\":").Append(Json.Num(start))
+          .Append(",\"length_seconds\":").Append(Json.Num(length))
+          .Append("}");
+        return RpcResponse.Result(req.Id, sb.ToString());
+    }
+
+    private TrackEvent GetEvent(Project project, int trackIndex, int eventIndex)
+    {
+        if (trackIndex < 0 || trackIndex >= project.Tracks.Count)
+            throw new Exception("Invalid track_index");
+        Track t = project.Tracks[trackIndex];
+        if (eventIndex < 0 || eventIndex >= t.Events.Count)
+            throw new Exception("Invalid event_index");
+        return t.Events[eventIndex];
+    }
+
+    private string TrimEvent(RpcRequest req)
+    {
+        Project project = RequireProject(req);
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
+        int eventIndex = Json.GetInt(req.ParamsJson, "event_index", -1);
+        double start = Json.GetDouble(req.ParamsJson, "start_seconds", double.NaN);
+        double length = Json.GetDouble(req.ParamsJson, "length_seconds", double.NaN);
+        TrackEvent ev = GetEvent(project, trackIndex, eventIndex);
+        if (!double.IsNaN(start))
+            ev.Start = SecondsToTimecode(start);
+        if (!double.IsNaN(length))
+            ev.Length = SecondsToTimecode(length);
+        return RpcResponse.Result(req.Id,
+            "{\"ok\":true,\"start_seconds\":" + Json.Num(TimecodeToSeconds(ev.Start)) +
+            ",\"length_seconds\":" + Json.Num(TimecodeToSeconds(ev.Length)) + "}");
+    }
+
+    private string MoveEvent(RpcRequest req)
+    {
+        Project project = RequireProject(req);
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
+        int eventIndex = Json.GetInt(req.ParamsJson, "event_index", -1);
+        double start = Json.GetDouble(req.ParamsJson, "start_seconds", 0);
+        TrackEvent ev = GetEvent(project, trackIndex, eventIndex);
+        ev.Start = SecondsToTimecode(start);
+        return RpcResponse.Result(req.Id,
+            "{\"ok\":true,\"start_seconds\":" + Json.Num(TimecodeToSeconds(ev.Start)) + "}");
+    }
+
+    private string DeleteEvent(RpcRequest req)
+    {
+        Project project = RequireProject(req);
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
+        int eventIndex = Json.GetInt(req.ParamsJson, "event_index", -1);
+        TrackEvent ev = GetEvent(project, trackIndex, eventIndex);
+        ev.Track.Events.Remove(ev);
+        return RpcResponse.Result(req.Id, "{\"ok\":true}");
+    }
+
+    private string TransportPlay(RpcRequest req)
+    {
+        myVegas.Transport.Play();
+        return RpcResponse.Result(req.Id, "{\"ok\":true}");
+    }
+
+    private string TransportStop(RpcRequest req)
+    {
+        myVegas.Transport.Stop();
+        return RpcResponse.Result(req.Id, "{\"ok\":true}");
+    }
+
+    private string TransportSeek(RpcRequest req)
+    {
+        double seconds = Json.GetDouble(req.ParamsJson, "seconds", 0);
+        myVegas.Transport.CursorPosition = SecondsToTimecode(seconds);
+        return RpcResponse.Result(req.Id, "{\"ok\":true,\"seconds\":" + Json.Num(seconds) + "}");
     }
 
     private void Log(string msg)
     {
-        // Swap for a real log file under docs/SETUP.md guidance if the
-        // MessageBox-per-line approach proves too noisy during development.
-        Console.WriteLine("[vegas-director-mcp] " + msg);
+        try
+        {
+            string dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "vegas-director-mcp");
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(Path.Combine(dir, "host.log"),
+                DateTime.Now.ToString("s") + " " + msg + Environment.NewLine);
+        }
+        catch { }
     }
 }
-
-// --- Minimal RPC plumbing ---
 
 public class RpcRequest
 {
@@ -187,44 +515,13 @@ public class RpcRequest
 
     public static RpcRequest Parse(string json)
     {
-        // Deliberately minimal parser for the fixed shape we emit from the
-        // Python side: {"jsonrpc":"2.0","id":N,"method":"...","params":{...}}
-        // Replace with a real JSON library once the target .NET profile is
-        // confirmed (see file header comment).
         RpcRequest r = new RpcRequest();
-        r.Id = ExtractField(json, "id");
-        r.Method = ExtractStringField(json, "method");
-        r.ParamsJson = ExtractObjectField(json, "params");
-        if (r.Method == null)
-            throw new Exception("Missing 'method' field");
+        r.Id = Json.GetRaw(json, "id");
+        r.Method = Json.GetString(json, "method");
+        r.ParamsJson = Json.GetObject(json, "params") ?? "{}";
+        if (r.Method == null || r.Method.Length == 0)
+            throw new Exception("Missing method");
         return r;
-    }
-
-    private static string ExtractField(string json, string key)
-    {
-        string marker = "\"" + key + "\":";
-        int i = json.IndexOf(marker);
-        if (i < 0) return null;
-        i += marker.Length;
-        int j = i;
-        while (j < json.Length && json[j] != ',' && json[j] != '}') j++;
-        return json.Substring(i, j - i).Trim();
-    }
-
-    private static string ExtractStringField(string json, string key)
-    {
-        string raw = ExtractField(json, key);
-        if (raw == null) return null;
-        return raw.Trim('"');
-    }
-
-    private static string ExtractObjectField(string json, string key)
-    {
-        string marker = "\"" + key + "\":";
-        int i = json.IndexOf(marker);
-        if (i < 0) return "{}";
-        i += marker.Length;
-        return json.Substring(i).Trim();
     }
 }
 
@@ -232,14 +529,143 @@ public static class RpcResponse
 {
     public static string Result(string id, string resultJson)
     {
-        return "{\"jsonrpc\":\"2.0\",\"id\":" + (id ?? "null") +
-               ",\"result\":" + resultJson + "}";
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + (id ?? "null") + ",\"result\":" + resultJson + "}";
     }
 
     public static string Error(string id, int code, string message)
     {
         return "{\"jsonrpc\":\"2.0\",\"id\":" + (id ?? "null") +
-               ",\"error\":{\"code\":" + code + ",\"message\":\"" +
-               message.Replace("\"", "'") + "\"}}";
+               ",\"error\":{\"code\":" + code + ",\"message\":" + Json.Str(message) + "}}";
+    }
+}
+
+public static class Json
+{
+    public static string Str(string s)
+    {
+        if (s == null) return "null";
+        StringBuilder sb = new StringBuilder();
+        sb.Append('"');
+        foreach (char c in s)
+        {
+            if (c == '"' || c == '\\') sb.Append('\\').Append(c);
+            else if (c == '\n') sb.Append("\\n");
+            else if (c == '\r') sb.Append("\\r");
+            else if (c == '\t') sb.Append("\\t");
+            else sb.Append(c);
+        }
+        sb.Append('"');
+        return sb.ToString();
+    }
+
+    public static string Num(double d)
+    {
+        if (double.IsNaN(d) || double.IsInfinity(d)) return "0";
+        return d.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public static string GetRaw(string json, string key)
+    {
+        string marker = "\"" + key + "\":";
+        int i = json.IndexOf(marker);
+        if (i < 0) return null;
+        i += marker.Length;
+        while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
+        if (i >= json.Length) return null;
+        if (json[i] == '"')
+        {
+            int j = i + 1;
+            while (j < json.Length)
+            {
+                if (json[j] == '\\') { j += 2; continue; }
+                if (json[j] == '"') break;
+                j++;
+            }
+            return json.Substring(i, j - i + 1);
+        }
+        int k = i;
+        while (k < json.Length && json[k] != ',' && json[k] != '}' && json[k] != ']') k++;
+        return json.Substring(i, k - i).Trim();
+    }
+
+    public static string GetString(string json, string key)
+    {
+        string raw = GetRaw(json, key);
+        if (raw == null) return null;
+        raw = raw.Trim();
+        if (raw.Length >= 2 && raw[0] == '"')
+        {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 1; i < raw.Length - 1; i++)
+            {
+                if (raw[i] == '\\' && i + 1 < raw.Length - 1)
+                {
+                    char n = raw[i + 1];
+                    if (n == 'n') sb.Append('\n');
+                    else if (n == 'r') sb.Append('\r');
+                    else if (n == 't') sb.Append('\t');
+                    else sb.Append(n);
+                    i++;
+                }
+                else sb.Append(raw[i]);
+            }
+            return sb.ToString();
+        }
+        if (raw == "null") return null;
+        return raw;
+    }
+
+    public static int GetInt(string json, string key, int fallback)
+    {
+        string raw = GetRaw(json, key);
+        if (raw == null) return fallback;
+        int v;
+        if (int.TryParse(raw.Trim().Trim('"'), out v)) return v;
+        return fallback;
+    }
+
+    public static double GetDouble(string json, string key, double fallback)
+    {
+        string raw = GetRaw(json, key);
+        if (raw == null) return fallback;
+        double v;
+        if (double.TryParse(raw.Trim().Trim('"'),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out v)) return v;
+        return fallback;
+    }
+
+    public static string GetObject(string json, string key)
+    {
+        string marker = "\"" + key + "\":";
+        int i = json.IndexOf(marker);
+        if (i < 0) return null;
+        i += marker.Length;
+        while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
+        if (i >= json.Length || json[i] != '{') return "{}";
+        int depth = 0;
+        int start = i;
+        for (; i < json.Length; i++)
+        {
+            char c = json[i];
+            if (c == '"')
+            {
+                i++;
+                while (i < json.Length)
+                {
+                    if (json[i] == '\\') { i += 2; continue; }
+                    if (json[i] == '"') break;
+                    i++;
+                }
+                continue;
+            }
+            if (c == '{') depth++;
+            else if (c == '}')
+            {
+                depth--;
+                if (depth == 0) return json.Substring(start, i - start + 1);
+            }
+        }
+        return json.Substring(start);
     }
 }

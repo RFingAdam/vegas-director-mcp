@@ -39,7 +39,7 @@ class VegasHostConfig:
     @classmethod
     def from_env(cls) -> "VegasHostConfig":
         return cls(
-            transport=os.environ.get("VEGAS_HOST_TRANSPORT", "pipe"),
+            transport=os.environ.get("VEGAS_HOST_TRANSPORT", "tcp"),
             pipe_name=os.environ.get("VEGAS_HOST_PIPE_NAME", "vegas-director"),
             tcp_host=os.environ.get("VEGAS_HOST_ADDRESS", "127.0.0.1"),
             tcp_port=int(os.environ.get("VEGAS_HOST_PORT", "8752")),

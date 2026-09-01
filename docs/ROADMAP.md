@@ -1,19 +1,13 @@
 # Roadmap
 
-## Phase 0 — Scaffold (this commit)
-- Repo structure, protocol spec, license, gitignore.
-- Skeleton script host (compiles, opens a pipe, handles `project.get_state`
-  as a real round-trip proof).
-- Skeleton MCP server (FastMCP, one working tool: `get_project_state`).
+## Phase 0 — Scaffold
+- Done: repo structure, protocol, license.
 
-## Phase 1 — First real round-trip
-- Confirm the C# host actually loads in a real VEGAS install (Tools >
-  Scripting) and responds over the pipe from a real running instance.
-- Wire `project.get_state`, `track.add`, `event.add_video`/`add_audio`,
-  `media.import`, `render.start` end-to-end against a real project.
-- MCP server: matching tools, with real error surfacing (no swallowed
-  exceptions — a VEGAS-side error must reach the model as a tool error, not
-  a silent no-op).
+## Phase 1 — First real round-trip (in progress on VEGAS Pro 22)
+- Host: pipe + TCP 8752, UI-thread marshal, ping/get_state/save/track.add/
+  media.import/event.add_video|audio/trim/move/delete/transport.*
+- MCP: matching FastMCP tools; default transport TCP.
+- Still needed: live load in VEGAS Scripting menu, smoke test, render.*
 
 ## Phase 2 — Media grounding
 - `probe_media` (ffprobe: duration, resolution, fps, audio channel/peak
