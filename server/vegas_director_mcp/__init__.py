@@ -135,7 +135,7 @@ def set_motion_keyframes(
     keyframes: list[dict[str, Any]],
     reset: bool = True,
 ) -> dict:
-    """Set VideoMotion pan/crop keyframes. Each item: {at_seconds, scale, pan_x, pan_y}. scale 1.0=identity; 1.4~=zoom-in. pan -1..1."""
+    """Set VideoMotion pan/crop keyframes. Each item: {at_seconds, scale, pan_x, pan_y, type?, smoothness?}. type=linear|fast|slow|smooth|sharp|hold; smoothness 0..1."""
     return tools.set_motion_keyframes(track_index, event_index, keyframes, reset)
 
 

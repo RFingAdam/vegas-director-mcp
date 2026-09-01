@@ -184,8 +184,10 @@ def set_motion_keyframes(
 ) -> dict:
     """Set VideoMotion pan/crop keyframes.
 
-    Each keyframe dict: {at_seconds, scale, pan_x, pan_y}
+    Each keyframe dict: {at_seconds, scale, pan_x, pan_y, type?, smoothness?}
     scale 1.0 = no zoom; 1.4 ~= 40% zoom-in. pan_* in -1..1 (neg = left/up).
+    type/curve: linear|fast|slow|smooth|sharp|hold (default smooth).
+    smoothness: 0..1 spatial path curve (default 0.5; 0=linear path).
     """
     return _call(
         "event.set_motion",

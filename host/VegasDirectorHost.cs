@@ -700,7 +700,23 @@ public class EntryPoint
         catch { }
     }
 
-    private void ApplyMotionKeyframe(VideoMotionKeyframe key, double scale, double panX, double panY)
+    private VideoKeyframeType ParseVideoKeyframeType(string name, VideoKeyframeType fallback)
+    {
+        if (name == null || name.Length == 0) return fallback;
+        switch (name.Trim().ToLowerInvariant())
+        {
+            case "linear": return VideoKeyframeType.Linear;
+            case "fast": return VideoKeyframeType.Fast;
+            case "slow": return VideoKeyframeType.Slow;
+            case "smooth": return VideoKeyframeType.Smooth;
+            case "sharp": return VideoKeyframeType.Sharp;
+            case "hold": return VideoKeyframeType.Hold;
+            default: return fallback;
+        }
+    }
+
+    private void ApplyMotionKeyframe(VideoMotionKeyframe key, double scale, double panX, double panY,
+                                     string typeName, double smoothness)
     {
         if (scale <= 0) scale = 1.0;
         // scale 1.0 = identity; 1.4 = ~40% zoom-in via smaller crop window
@@ -712,6 +728,13 @@ public class EntryPoint
         float dx = (float)(pw * 0.35 * panX);
         float dy = (float)(ph * 0.35 * panY);
         key.MoveBy(new VideoMotionVertex(dx, dy));
+
+        // Magix temporal interpolation (Smooth/Fast/Slow/Hold/…) + spatial Smoothness
+        try { key.Type = ParseVideoKeyframeType(typeName, VideoKeyframeType.Smooth); } catch { }
+        if (!double.IsNaN(smoothness))
+        {
+            try { key.Smoothness = (float)Math.Max(0.0, Math.Min(1.0, smoothness)); } catch { }
+        }
     }
 
     private string SetEventMotion(RpcRequest req)
@@ -741,6 +764,10 @@ public class EntryPoint
                 double scale = Json.GetDouble(obj, "scale", 1.0);
                 double panX = Json.GetDouble(obj, "pan_x", 0);
                 double panY = Json.GetDouble(obj, "pan_y", 0);
+                string typeName = Json.GetString(obj, "type")
+                    ?? Json.GetString(obj, "curve")
+                    ?? "smooth";
+                double smoothness = Json.GetDouble(obj, "smoothness", 0.5);
 
                 VideoMotionKeyframe key = null;
                 if (at <= 0.0001 && ve.VideoMotion.Keyframes.Count > 0)
@@ -752,7 +779,7 @@ public class EntryPoint
                     key = new VideoMotionKeyframe(SecondsToTimecode(at));
                     ve.VideoMotion.Keyframes.Add(key);
                 }
-                ApplyMotionKeyframe(key, scale, panX, panY);
+                ApplyMotionKeyframe(key, scale, panX, panY, typeName, smoothness);
                 added++;
             }
             return RpcResponse.Result(req.Id,
