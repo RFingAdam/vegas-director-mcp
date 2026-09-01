@@ -12,19 +12,22 @@ def _call(method: str, params: dict[str, Any] | None = None) -> dict:
     try:
         result = _client.call(method, params)
         if isinstance(result, dict):
+            # Host already returns soft {ok:false,error} or success payloads.
+            if "ok" not in result and "error" not in result:
+                result = {"ok": True, **result}
             return result
-        return {"result": result}
+        return {"ok": True, "result": result}
     except VegasHostError as exc:
-        return {"error": True, "code": exc.code, "message": exc.message}
+        return {"ok": False, "error": exc.message, "code": exc.code}
     except (ConnectionRefusedError, FileNotFoundError, OSError, TimeoutError) as exc:
         return {
-            "error": True,
-            "code": -1,
-            "message": (
+            "ok": False,
+            "error": (
                 "Could not reach the VEGAS script host. Open VEGAS Pro, run "
                 "Tools > Scripting > VegasDirectorHost, leave the dialog open. "
                 f"({exc})"
             ),
+            "code": -1,
         }
 
 
@@ -49,6 +52,24 @@ def add_track(type: str = "video", name: str = "") -> dict:
 
 def import_media(path: str) -> dict:
     return _call("media.import", {"path": path})
+
+
+def place_media(
+    path: str,
+    track_index: int,
+    start_seconds: float = 0.0,
+    length_seconds: float = -1.0,
+) -> dict:
+    """Place media on a track; host picks video vs audio from track type."""
+    return _call(
+        "media.place",
+        {
+            "path": path,
+            "track_index": track_index,
+            "start_seconds": start_seconds,
+            "length_seconds": length_seconds,
+        },
+    )
 
 
 def add_video_event(

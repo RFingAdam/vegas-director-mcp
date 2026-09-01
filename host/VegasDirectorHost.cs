@@ -1,11 +1,9 @@
-// VegasDirectorHost.cs — VEGAS Pro 22 script host for vegas-director-mcp
-// Install: copy to Script Menu, run Tools > Scripting > VegasDirectorHost
-// All ScriptPortal.Vegas calls run on the UI thread via Vegas.Invoke.
+// VegasDirectorHost.cs — VEGAS Pro 22 TCP host (no Pipes; WinForms marshal; soft ok:false errors)
+// Tools > Scripting > VegasDirectorHost — leave dialog open.
 
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Pipes;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -15,19 +13,26 @@ using ScriptPortal.Vegas;
 
 public class EntryPoint
 {
-    private const string PipeName = "vegas-director";
     private const int TcpPort = 8752;
     private Vegas myVegas;
     private volatile bool running = true;
+    private Control uiMarshal;
 
     public void FromVegas(Vegas vegas)
     {
         myVegas = vegas;
-        Log("VegasDirectorHost starting. pipe=" + PipeName + " tcp=127.0.0.1:" + TcpPort);
 
-        Thread pipeThread = new Thread(RunPipeListener);
-        pipeThread.IsBackground = true;
-        pipeThread.Start();
+        // Vegas has no Invoke. A WinForms control created on this (UI) thread
+        // is how we marshal ScriptPortal calls back from the TCP listener.
+        Form marshalForm = new Form();
+        marshalForm.ShowInTaskbar = false;
+        marshalForm.FormBorderStyle = FormBorderStyle.FixedToolWindow;
+        marshalForm.Opacity = 0;
+        marshalForm.Size = new System.Drawing.Size(0, 0);
+        marshalForm.Show();
+        uiMarshal = marshalForm;
+
+        Log("VegasDirectorHost starting tcp=127.0.0.1:" + TcpPort);
 
         Thread tcpThread = new Thread(RunTcpListener);
         tcpThread.IsBackground = true;
@@ -35,37 +40,13 @@ public class EntryPoint
 
         MessageBox.Show(
             "vegas-director-mcp host is running.\n\n" +
-            "Named pipe: \\\\.\\pipe\\" + PipeName + "\n" +
             "TCP: 127.0.0.1:" + TcpPort + "\n\n" +
             "Leave this dialog open while you want external control.\n" +
-            "Closing it stops the listeners.",
+            "Closing it stops the listener.",
             "vegas-director-mcp");
 
         running = false;
-    }
-
-    private void RunPipeListener()
-    {
-        while (running)
-        {
-            try
-            {
-                using (NamedPipeServerStream pipe = new NamedPipeServerStream(
-                    PipeName, PipeDirection.InOut, 1,
-                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous))
-                {
-                    pipe.WaitForConnection();
-                    Log("Pipe client connected.");
-                    HandleStream(pipe);
-                }
-            }
-            catch (Exception ex)
-            {
-                if (!running) break;
-                Log("Pipe listener error: " + ex.Message);
-                Thread.Sleep(500);
-            }
-        }
+        try { marshalForm.Close(); } catch { }
     }
 
     private void RunTcpListener()
@@ -83,11 +64,10 @@ public class EntryPoint
                     Thread.Sleep(50);
                     continue;
                 }
-                TcpClient client = listener.AcceptTcpClient();
-                Log("TCP client connected.");
-                using (client)
+                using (TcpClient client = listener.AcceptTcpClient())
                 using (NetworkStream stream = client.GetStream())
                 {
+                    Log("TCP client connected.");
                     HandleStream(stream);
                 }
             }
@@ -133,6 +113,8 @@ public class EntryPoint
         {
             switch (req.Method)
             {
+                case "ping":
+                    return RpcResponse.Result(req.Id, "{\"ok\":true,\"host\":\"vegas-director\"}");
                 case "project.get_state":
                     return InvokeOnUiThread(req, GetProjectState);
                 case "project.save":
@@ -141,6 +123,8 @@ public class EntryPoint
                     return InvokeOnUiThread(req, AddTrack);
                 case "media.import":
                     return InvokeOnUiThread(req, ImportMedia);
+                case "media.place":
+                    return InvokeOnUiThread(req, PlaceMedia);
                 case "event.add_video":
                     return InvokeOnUiThread(req, AddVideoEvent);
                 case "event.add_audio":
@@ -157,33 +141,45 @@ public class EntryPoint
                     return InvokeOnUiThread(req, TransportStop);
                 case "transport.seek":
                     return InvokeOnUiThread(req, TransportSeek);
-                case "ping":
-                    return RpcResponse.Result(req.Id, "{\"ok\":true,\"host\":\"vegas-director\"}");
                 default:
                     return RpcResponse.Error(req.Id, -32601, "Method not found: " + req.Method);
             }
         }
         catch (Exception ex)
         {
-            return RpcResponse.Error(req.Id, -32603, "Internal error: " + ex.Message);
+            return SoftFail(req.Id, "Internal error: " + ex.Message);
         }
     }
 
     private string InvokeOnUiThread(RpcRequest req, Func<RpcRequest, string> handler)
     {
+        if (uiMarshal == null || uiMarshal.IsDisposed)
+            return SoftFail(req.Id, "UI marshal unavailable");
+
         string result = null;
         Exception thrown = null;
-        myVegas.Invoke((MethodInvoker)delegate
+        ManualResetEvent done = new ManualResetEvent(false);
+
+        uiMarshal.BeginInvoke((MethodInvoker)delegate
         {
             try { result = handler(req); }
             catch (Exception ex) { thrown = ex; }
+            finally { done.Set(); }
         });
+
+        if (!done.WaitOne(60000))
+            return SoftFail(req.Id, "UI marshal timed out");
         if (thrown != null)
-            return RpcResponse.Error(req.Id, -32603, thrown.Message);
+            return SoftFail(req.Id, thrown.Message);
         return result;
     }
 
-    private Project RequireProject(RpcRequest req)
+    private static string SoftFail(string id, string error)
+    {
+        return RpcResponse.Result(id, "{\"ok\":false,\"error\":" + Json.Str(error) + "}");
+    }
+
+    private Project RequireProject()
     {
         Project project = myVegas.Project;
         if (project == null)
@@ -193,15 +189,7 @@ public class EntryPoint
 
     private static double TimecodeToSeconds(Timecode tc)
     {
-        // VEGAS Timecode: 1 second = 10000000 ticks (100ns units) on most builds.
-        try { return tc.ToMilliseconds() / 1000.0; }
-        catch
-        {
-            long ticks;
-            if (long.TryParse(tc.ToString(), out ticks))
-                return ticks / 10000000.0;
-            return 0;
-        }
+        return tc.ToMilliseconds() / 1000.0;
     }
 
     private static Timecode SecondsToTimecode(double seconds)
@@ -211,7 +199,7 @@ public class EntryPoint
 
     private string GetProjectState(RpcRequest req)
     {
-        Project project = RequireProject(req);
+        Project project = RequireProject();
         StringBuilder tracks = new StringBuilder();
         tracks.Append("[");
         int videoTracks = 0, audioTracks = 0;
@@ -275,43 +263,35 @@ public class EntryPoint
 
     private string AddTrack(RpcRequest req)
     {
-        Project project = RequireProject(req);
+        Project project = RequireProject();
         string type = (Json.GetString(req.ParamsJson, "type") ?? "video").ToLowerInvariant();
         string name = Json.GetString(req.ParamsJson, "name") ?? "";
         int index = project.Tracks.Count;
         if (type == "audio")
-        {
-            AudioTrack at = new AudioTrack(project, index, name);
-            project.Tracks.Add(at);
-        }
+            project.Tracks.Add(new AudioTrack(project, index, name));
         else
-        {
-            VideoTrack vt = new VideoTrack(project, index, name);
-            project.Tracks.Add(vt);
-        }
+            project.Tracks.Add(new VideoTrack(project, index, name));
         return RpcResponse.Result(req.Id,
             "{\"ok\":true,\"track_index\":" + index + ",\"type\":" + Json.Str(type) + "}");
     }
 
     private string ImportMedia(RpcRequest req)
     {
-        Project project = RequireProject(req);
+        Project project = RequireProject();
         string path = Json.GetString(req.ParamsJson, "path");
         if (path == null || path.Length == 0)
-            return RpcResponse.Error(req.Id, -32602, "params.path required");
+            return SoftFail(req.Id, "params.path required");
         if (!File.Exists(path))
-            return RpcResponse.Error(req.Id, -32003, "Media file not found: " + path);
+            return SoftFail(req.Id, "Media file not found: " + path);
 
-        Media media = new Media(path);
-        project.MediaPool.Add(media);
-
-        double len = 0;
-        bool hasVideo = media.HasVideo();
-        bool hasAudio = media.HasAudio();
-        if (hasVideo && media.Streams.Count > 0)
-            len = TimecodeToSeconds(media.Length);
-        else if (hasAudio)
-            len = TimecodeToSeconds(media.Length);
+        Media media;
+        try { media = project.MediaPool.AddMedia(path); }
+        catch (Exception ex) { return SoftFail(req.Id, "Import failed: " + ex.Message); }
+        bool hasVideo = false;
+        bool hasAudio = false;
+        try { hasVideo = media.HasVideo(); } catch { }
+        try { hasAudio = media.HasAudio(); } catch { }
+        double len = TimecodeToSeconds(media.Length);
 
         StringBuilder sb = new StringBuilder();
         sb.Append("{\"ok\":true")
@@ -330,7 +310,8 @@ public class EntryPoint
         {
             try
             {
-                if (string.Equals(Path.GetFullPath(m.FilePath), full, StringComparison.OrdinalIgnoreCase))
+                if (m.FilePath != null &&
+                    string.Equals(Path.GetFullPath(m.FilePath), full, StringComparison.OrdinalIgnoreCase))
                     return m;
             }
             catch { }
@@ -338,90 +319,151 @@ public class EntryPoint
         return null;
     }
 
-    private string AddVideoEvent(RpcRequest req)
+    private Media EnsureMedia(Project project, string path)
     {
-        Project project = RequireProject(req);
-        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", 0);
-        double start = Json.GetDouble(req.ParamsJson, "start_seconds", 0);
-        double length = Json.GetDouble(req.ParamsJson, "length_seconds", -1);
-        string path = Json.GetString(req.ParamsJson, "media_path");
-        if (path == null || path.Length == 0)
-            return RpcResponse.Error(req.Id, -32602, "params.media_path required");
-
-        if (trackIndex < 0 || trackIndex >= project.Tracks.Count || !project.Tracks[trackIndex].IsVideo())
-            return RpcResponse.Error(req.Id, -32002, "Invalid video track_index");
-
         Media media = FindMediaByPath(project, path);
-        if (media == null)
-        {
-            if (!File.Exists(path))
-                return RpcResponse.Error(req.Id, -32003, "Media file not found: " + path);
-            media = new Media(path);
-            project.MediaPool.Add(media);
-        }
-        if (!media.HasVideo())
-            return RpcResponse.Error(req.Id, -32003, "Media has no video stream");
+        if (media != null) return media;
+        if (!File.Exists(path))
+            throw new Exception("Media file not found: " + path);
+        return project.MediaPool.AddMedia(path);
+    }
 
-        if (length < 0)
-            length = TimecodeToSeconds(media.Length);
-
-        VideoTrack vtrack = (VideoTrack)project.Tracks[trackIndex];
-        VideoEvent ve = vtrack.AddVideoEvent(SecondsToTimecode(start), SecondsToTimecode(length));
-        MediaStream stream = media.GetVideoStreamByIndex(0);
-        ve.AddTake(stream);
-
-        int eventIndex = vtrack.Events.Count - 1;
+    private string PlaceEventResult(string id, int trackIndex, int eventIndex, double start, double length, string kind)
+    {
         StringBuilder sb = new StringBuilder();
         sb.Append("{\"ok\":true")
           .Append(",\"track_index\":").Append(trackIndex)
           .Append(",\"event_index\":").Append(eventIndex)
           .Append(",\"start_seconds\":").Append(Json.Num(start))
           .Append(",\"length_seconds\":").Append(Json.Num(length))
+          .Append(",\"media_kind\":").Append(Json.Str(kind))
           .Append("}");
-        return RpcResponse.Result(req.Id, sb.ToString());
+        return RpcResponse.Result(id, sb.ToString());
+    }
+
+    private string PlaceMedia(RpcRequest req)
+    {
+        Project project = RequireProject();
+        string path = Json.GetString(req.ParamsJson, "path");
+        if (path == null || path.Length == 0)
+            path = Json.GetString(req.ParamsJson, "media_path");
+        if (path == null || path.Length == 0)
+            return SoftFail(req.Id, "params.path or params.media_path required");
+
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
+        double start = Json.GetDouble(req.ParamsJson, "start_seconds", 0);
+        double length = Json.GetDouble(req.ParamsJson, "length_seconds", -1);
+        if (trackIndex < 0 || trackIndex >= project.Tracks.Count)
+            return SoftFail(req.Id, "Invalid track_index");
+
+        Track track = project.Tracks[trackIndex];
+        Media media;
+        try { media = EnsureMedia(project, path); }
+        catch (Exception ex) { return SoftFail(req.Id, ex.Message); }
+
+        if (length < 0)
+            length = TimecodeToSeconds(media.Length);
+
+        try
+        {
+            if (track.IsVideo())
+            {
+                VideoTrack vtrack = (VideoTrack)track;
+                VideoEvent ve = vtrack.AddVideoEvent(SecondsToTimecode(start), SecondsToTimecode(length));
+                MediaStream stream = media.Streams.GetItemByMediaType(MediaType.Video, 0);
+                if (stream == null)
+                    return SoftFail(req.Id, "Media has no video stream: " + path);
+                ve.AddTake(stream);
+                return PlaceEventResult(req.Id, trackIndex, vtrack.Events.Count - 1, start, length, "video");
+            }
+            if (track.IsAudio())
+            {
+                AudioTrack atrack = (AudioTrack)track;
+                AudioEvent ae = atrack.AddAudioEvent(SecondsToTimecode(start), SecondsToTimecode(length));
+                MediaStream stream = media.Streams.GetItemByMediaType(MediaType.Audio, 0);
+                if (stream == null)
+                    return SoftFail(req.Id, "Media has no audio stream: " + path);
+                ae.AddTake(stream);
+                return PlaceEventResult(req.Id, trackIndex, atrack.Events.Count - 1, start, length, "audio");
+            }
+            return SoftFail(req.Id, "Track is neither video nor audio");
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "Place failed: " + ex.Message);
+        }
+    }
+
+    private string AddVideoEvent(RpcRequest req)
+    {
+        Project project = RequireProject();
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", 0);
+        double start = Json.GetDouble(req.ParamsJson, "start_seconds", 0);
+        double length = Json.GetDouble(req.ParamsJson, "length_seconds", -1);
+        string path = Json.GetString(req.ParamsJson, "media_path");
+        if (path == null || path.Length == 0)
+            path = Json.GetString(req.ParamsJson, "path");
+        if (path == null || path.Length == 0)
+            return SoftFail(req.Id, "params.media_path required");
+        if (trackIndex < 0 || trackIndex >= project.Tracks.Count || !project.Tracks[trackIndex].IsVideo())
+            return SoftFail(req.Id, "Invalid video track_index");
+
+        Media media;
+        try { media = EnsureMedia(project, path); }
+        catch (Exception ex) { return SoftFail(req.Id, ex.Message); }
+        if (length < 0)
+            length = TimecodeToSeconds(media.Length);
+
+        try
+        {
+            VideoTrack vtrack = (VideoTrack)project.Tracks[trackIndex];
+            VideoEvent ve = vtrack.AddVideoEvent(SecondsToTimecode(start), SecondsToTimecode(length));
+            MediaStream stream = media.Streams.GetItemByMediaType(MediaType.Video, 0);
+            if (stream == null)
+                return SoftFail(req.Id, "Media has no video stream: " + path);
+            ve.AddTake(stream);
+            return PlaceEventResult(req.Id, trackIndex, vtrack.Events.Count - 1, start, length, "video");
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "Add video failed: " + ex.Message);
+        }
     }
 
     private string AddAudioEvent(RpcRequest req)
     {
-        Project project = RequireProject(req);
+        Project project = RequireProject();
         int trackIndex = Json.GetInt(req.ParamsJson, "track_index", 0);
         double start = Json.GetDouble(req.ParamsJson, "start_seconds", 0);
         double length = Json.GetDouble(req.ParamsJson, "length_seconds", -1);
         string path = Json.GetString(req.ParamsJson, "media_path");
         if (path == null || path.Length == 0)
-            return RpcResponse.Error(req.Id, -32602, "params.media_path required");
-
+            path = Json.GetString(req.ParamsJson, "path");
+        if (path == null || path.Length == 0)
+            return SoftFail(req.Id, "params.media_path required");
         if (trackIndex < 0 || trackIndex >= project.Tracks.Count || !project.Tracks[trackIndex].IsAudio())
-            return RpcResponse.Error(req.Id, -32002, "Invalid audio track_index");
+            return SoftFail(req.Id, "Invalid audio track_index");
 
-        Media media = FindMediaByPath(project, path);
-        if (media == null)
-        {
-            if (!File.Exists(path))
-                return RpcResponse.Error(req.Id, -32003, "Media file not found: " + path);
-            media = new Media(path);
-            project.MediaPool.Add(media);
-        }
-        if (!media.HasAudio())
-            return RpcResponse.Error(req.Id, -32003, "Media has no audio stream");
-
+        Media media;
+        try { media = EnsureMedia(project, path); }
+        catch (Exception ex) { return SoftFail(req.Id, ex.Message); }
         if (length < 0)
             length = TimecodeToSeconds(media.Length);
 
-        AudioTrack atrack = (AudioTrack)project.Tracks[trackIndex];
-        AudioEvent ae = atrack.AddAudioEvent(SecondsToTimecode(start), SecondsToTimecode(length));
-        MediaStream stream = media.GetAudioStreamByIndex(0);
-        ae.AddTake(stream);
-
-        int eventIndex = atrack.Events.Count - 1;
-        StringBuilder sb = new StringBuilder();
-        sb.Append("{\"ok\":true")
-          .Append(",\"track_index\":").Append(trackIndex)
-          .Append(",\"event_index\":").Append(eventIndex)
-          .Append(",\"start_seconds\":").Append(Json.Num(start))
-          .Append(",\"length_seconds\":").Append(Json.Num(length))
-          .Append("}");
-        return RpcResponse.Result(req.Id, sb.ToString());
+        try
+        {
+            AudioTrack atrack = (AudioTrack)project.Tracks[trackIndex];
+            AudioEvent ae = atrack.AddAudioEvent(SecondsToTimecode(start), SecondsToTimecode(length));
+            MediaStream stream = media.Streams.GetItemByMediaType(MediaType.Audio, 0);
+            if (stream == null)
+                return SoftFail(req.Id, "Media has no audio stream: " + path);
+            ae.AddTake(stream);
+            return PlaceEventResult(req.Id, trackIndex, atrack.Events.Count - 1, start, length, "audio");
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "Add audio failed: " + ex.Message);
+        }
     }
 
     private TrackEvent GetEvent(Project project, int trackIndex, int eventIndex)
@@ -436,16 +478,25 @@ public class EntryPoint
 
     private string TrimEvent(RpcRequest req)
     {
-        Project project = RequireProject(req);
+        Project project = RequireProject();
         int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
         int eventIndex = Json.GetInt(req.ParamsJson, "event_index", -1);
         double start = Json.GetDouble(req.ParamsJson, "start_seconds", double.NaN);
         double length = Json.GetDouble(req.ParamsJson, "length_seconds", double.NaN);
-        TrackEvent ev = GetEvent(project, trackIndex, eventIndex);
-        if (!double.IsNaN(start))
-            ev.Start = SecondsToTimecode(start);
-        if (!double.IsNaN(length))
-            ev.Length = SecondsToTimecode(length);
+        TrackEvent ev;
+        try { ev = GetEvent(project, trackIndex, eventIndex); }
+        catch (Exception ex) { return SoftFail(req.Id, ex.Message); }
+        try
+        {
+            if (!double.IsNaN(start))
+                ev.Start = SecondsToTimecode(start);
+            if (!double.IsNaN(length))
+                ev.Length = SecondsToTimecode(length);
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "Trim failed: " + ex.Message);
+        }
         return RpcResponse.Result(req.Id,
             "{\"ok\":true,\"start_seconds\":" + Json.Num(TimecodeToSeconds(ev.Start)) +
             ",\"length_seconds\":" + Json.Num(TimecodeToSeconds(ev.Length)) + "}");
@@ -453,23 +504,29 @@ public class EntryPoint
 
     private string MoveEvent(RpcRequest req)
     {
-        Project project = RequireProject(req);
+        Project project = RequireProject();
         int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
         int eventIndex = Json.GetInt(req.ParamsJson, "event_index", -1);
         double start = Json.GetDouble(req.ParamsJson, "start_seconds", 0);
-        TrackEvent ev = GetEvent(project, trackIndex, eventIndex);
-        ev.Start = SecondsToTimecode(start);
+        TrackEvent ev;
+        try { ev = GetEvent(project, trackIndex, eventIndex); }
+        catch (Exception ex) { return SoftFail(req.Id, ex.Message); }
+        try { ev.Start = SecondsToTimecode(start); }
+        catch (Exception ex) { return SoftFail(req.Id, "Move failed: " + ex.Message); }
         return RpcResponse.Result(req.Id,
             "{\"ok\":true,\"start_seconds\":" + Json.Num(TimecodeToSeconds(ev.Start)) + "}");
     }
 
     private string DeleteEvent(RpcRequest req)
     {
-        Project project = RequireProject(req);
+        Project project = RequireProject();
         int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
         int eventIndex = Json.GetInt(req.ParamsJson, "event_index", -1);
-        TrackEvent ev = GetEvent(project, trackIndex, eventIndex);
-        ev.Track.Events.Remove(ev);
+        TrackEvent ev;
+        try { ev = GetEvent(project, trackIndex, eventIndex); }
+        catch (Exception ex) { return SoftFail(req.Id, ex.Message); }
+        try { ev.Track.Events.Remove(ev); }
+        catch (Exception ex) { return SoftFail(req.Id, "Delete failed: " + ex.Message); }
         return RpcResponse.Result(req.Id, "{\"ok\":true}");
     }
 

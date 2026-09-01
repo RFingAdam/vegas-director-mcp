@@ -44,6 +44,17 @@ def import_media(path: str) -> dict:
 
 
 @mcp.tool()
+def place_media(
+    path: str,
+    track_index: int,
+    start_seconds: float = 0.0,
+    length_seconds: float = -1.0,
+) -> dict:
+    """Place media on a timeline track. Host chooses video/audio from track type. length_seconds=-1 uses full media length."""
+    return tools.place_media(path, track_index, start_seconds, length_seconds)
+
+
+@mcp.tool()
 def add_video_event(
     track_index: int,
     media_path: str,

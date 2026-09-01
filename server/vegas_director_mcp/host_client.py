@@ -72,7 +72,7 @@ class VegasHostClient:
         line = json.dumps(request) + "\n"
 
         raw_response = self._send(line)
-        response = json.loads(raw_response)
+        response = json.loads(raw_response.lstrip("\ufeff"))
 
         if "error" in response:
             err = response["error"]
@@ -98,7 +98,7 @@ class VegasHostClient:
                 if not chunk:
                     break
                 chunks.append(chunk)
-            return b"".join(chunks).decode("utf-8").strip()
+            return b"".join(chunks).decode("utf-8-sig").strip()
 
     def _send_pipe(self, line: str) -> str:
         # Named pipes are Windows-only and use a distinct API from sockets.
@@ -130,6 +130,7 @@ class VegasHostClient:
             win32file.WriteFile(handle, line.encode("utf-8"))  # type: ignore[arg-type]
             _, data = win32file.ReadFile(handle, 65536)  # type: ignore[arg-type]
             data_bytes: bytes = data if isinstance(data, bytes) else data.encode("utf-8")
-            return data_bytes.decode("utf-8").strip()
+            return data_bytes.decode("utf-8-sig").strip()
         finally:
             handle.Close()
+
