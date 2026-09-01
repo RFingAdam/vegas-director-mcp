@@ -22,15 +22,39 @@ public class EntryPoint
     {
         myVegas = vegas;
 
-        // Vegas has no Invoke. A WinForms control created on this (UI) thread
-        // is how we marshal ScriptPortal calls back from the TCP listener.
-        Form marshalForm = new Form();
-        marshalForm.ShowInTaskbar = false;
-        marshalForm.FormBorderStyle = FormBorderStyle.FixedToolWindow;
-        marshalForm.Opacity = 0;
-        marshalForm.Size = new System.Drawing.Size(0, 0);
-        marshalForm.Show();
-        uiMarshal = marshalForm;
+        // Vegas has no Invoke. A visible status Form on this (UI) thread
+        // marshals ScriptPortal calls and keeps the host alive.
+        // MessageBox was easy to lose behind other windows and killed TCP when dismissed.
+        Form status = new Form();
+        status.Text = "vegas-director-mcp host";
+        status.FormBorderStyle = FormBorderStyle.FixedDialog;
+        status.MaximizeBox = false;
+        status.MinimizeBox = true;
+        status.ShowInTaskbar = true;
+        status.StartPosition = FormStartPosition.CenterScreen;
+        status.ClientSize = new System.Drawing.Size(420, 160);
+        status.TopMost = false;
+
+        Label lbl = new Label();
+        lbl.AutoSize = false;
+        lbl.Dock = DockStyle.Fill;
+        lbl.Padding = new Padding(14);
+        lbl.Text =
+            "Host running — TCP 127.0.0.1:" + TcpPort + "\r\n\r\n" +
+            "Minimize this window while you scrub Vegas.\r\n" +
+            "Close it or click Stop host to disconnect MCP.";
+
+        Button stop = new Button();
+        stop.Text = "Stop host";
+        stop.Dock = DockStyle.Bottom;
+        stop.Height = 40;
+        stop.Click += delegate { status.Close(); };
+
+        status.Controls.Add(lbl);
+        status.Controls.Add(stop);
+        status.FormClosed += delegate { running = false; };
+
+        uiMarshal = status;
 
         Log("VegasDirectorHost starting tcp=127.0.0.1:" + TcpPort);
 
@@ -38,15 +62,10 @@ public class EntryPoint
         tcpThread.IsBackground = true;
         tcpThread.Start();
 
-        MessageBox.Show(
-            "vegas-director-mcp host is running.\n\n" +
-            "TCP: 127.0.0.1:" + TcpPort + "\n\n" +
-            "Leave this dialog open while you want external control.\n" +
-            "Closing it stops the listener.",
-            "vegas-director-mcp");
-
+        // Modal status form — survives focus changes; only exits when user stops it.
+        status.ShowDialog();
         running = false;
-        try { marshalForm.Close(); } catch { }
+        try { status.Dispose(); } catch { }
     }
 
     private void RunTcpListener()
