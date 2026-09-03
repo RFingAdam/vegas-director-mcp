@@ -2,7 +2,6 @@
 name = "vegas-director-mcp"
 version = "0.1.0"
 description = "MCP server for driving MAGIX VEGAS Pro via its scripting API."
-readme = "../README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
