@@ -19,7 +19,7 @@ run it from the Scripting menu.
 2. Open **VEGAS Pro 22** and create or open a project. The host refuses
    most calls if no project is active (`ok: false`).
 3. *Tools > Scripting > VegasDirectorHost*
-   - If the item is missing, restart VEGAS so it rescan the Script Menu.
+   - If the item is missing, restart VEGAS so it rescans the Script Menu.
 4. Leave the dialog open. Closing it stops the listener.
 5. Confirm the dialog says `TCP: 127.0.0.1:8752`.
 6. Logs: `%LOCALAPPDATA%\vegas-director-mcp\host.log`
