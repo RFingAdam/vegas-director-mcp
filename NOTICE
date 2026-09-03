@@ -1,0 +1,12 @@
+vegas-director-mcp
+Copyright (c) 2026 RFingAdam
+
+Licensed under the MIT License. See LICENSE.
+
+This project is an independent, unofficial tool. It is not affiliated with,
+endorsed by, sponsored by, or supported by MAGIX Software GmbH or any MAGIX
+company. VEGAS, VEGAS Pro, and MAGIX are trademarks of their respective owners.
+
+This repository does not redistribute MAGIX binaries, installers, or the
+VEGAS scripting assemblies. The host script calls ScriptPortal.Vegas only
+inside a locally licensed VEGAS Pro install.

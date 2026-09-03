@@ -46,4 +46,5 @@ Soft failures return JSON-RPC **result** `{ "ok": false, "error": "..." }` (neve
 }
 ```
 
-Validate live against VEGAS Pro 22 after **reloading** the host script (Tools > Scripting > VegasDirectorHost).
+The host binds TCP `127.0.0.1:8752` only. Validate live against VEGAS Pro 22
+after **reloading** the host script (Tools > Scripting > VegasDirectorHost).

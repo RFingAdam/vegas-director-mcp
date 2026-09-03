@@ -4,12 +4,12 @@
 - Done: repo structure, protocol, license.
 
 ## Phase 1 — First real round-trip (complete on disk; requires host reload in VEGAS)
-- Host: TCP 8752 (+ pipe client), WinForms UI-thread marshal, SoftFail `ok:false`.
+- Host: TCP `127.0.0.1:8752` only, WinForms UI-thread marshal, SoftFail `ok:false`.
 - Methods: ping / project.get_state (+ media_path, take offsets) / save /
   track.add / media.import / media.place / event.add_video|audio / trim
   (+ take_offset) / move / delete / transport.*.
 - MCP: matching FastMCP tools; default transport TCP.
-- Still needed from Adam: reload Script Menu host so live VEGAS matches disk.
+- Still needed from Adam: reload the Script Menu host so live VEGAS matches disk.
 
 ## Phase 2 — Magix FAQ editorial primitives (this PR)
 - `event.set_motion` — VideoMotion pan/crop keyframes (ScaleBy / MoveBy).

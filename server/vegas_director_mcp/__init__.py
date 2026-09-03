@@ -2,7 +2,9 @@
 
 Run with: python -m vegas_director_mcp
 
-Default transport is TCP 127.0.0.1:8752 (set VEGAS_HOST_TRANSPORT=pipe for named pipe).
+Default host transport is TCP 127.0.0.1:8752 (VEGAS_HOST_TRANSPORT,
+VEGAS_HOST_ADDRESS, VEGAS_HOST_PORT). The current VEGAS script host
+listens on TCP only.
 """
 from __future__ import annotations
 
