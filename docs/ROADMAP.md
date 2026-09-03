@@ -1,51 +1,42 @@
 # Roadmap
 
 ## Phase 0 — Scaffold
+- Done: repo structure, protocol, license.
 
-Done: repo layout, protocol sketch, MIT license.
+## Phase 1 — First real round-trip (complete on disk; requires host reload in VEGAS)
+- Host: TCP `127.0.0.1:8752` only, WinForms UI-thread marshal, SoftFail `ok:false`.
+- Methods: ping / project.get_state (+ media_path, take offsets) / save /
+  track.add / media.import / media.place / event.add_video|audio / trim
+  (+ take_offset) / move / delete / transport.*.
+- MCP: matching FastMCP tools; default transport TCP.
+- Still needed from Adam: reload the Script Menu host so live VEGAS matches disk.
 
-## Phase 1 — First real round-trip (on disk; live VEGAS still operator-owned)
+## Phase 2 — Magix FAQ editorial primitives (this PR)
+- `event.set_motion` — VideoMotion pan/crop keyframes (ScaleBy / MoveBy).
+- `event.set_fades` — FadeIn/Out Length + Smooth curve; optional Dissolve;
+  reciprocal_curve for overlaps.
+- `event.set_opacity` — FadeIn.Gain.
+- `event.add_title` — Titles & Text generator + OFX Text RTF (PNG lower-thirds
+  remain as branded backup under ironhaven thumbs).
+- `track.set_composite_level` — track opacity.
+- `envelope.set_points` — Volume / CompositeLevel create-or-update points.
+- `project.get_selected_events` — selected track/event indices.
+- `render.start` — best-effort RenderArgs or SoftFail → File > Render As.
+- Use case: cut a ~2 min Raid Hours promo (9.9/10) with zooms, fades, clarifying
+  text (native titles and/or PNG overlays).
 
-Implemented in this tree:
+## Phase 3 — Media grounding + higher-level edit helpers
+- `probe_media` (ffprobe) and `detect_scenes` (ffmpeg) for real in/out candidates.
+- Optional Whisper for dialogue-driven cuts.
+- Crossfade / ducking helpers built on envelope + fades primitives.
+- `propose_edit` composite tool iterating place → inspect → revise.
 
-- Host: TCP `127.0.0.1:8752` only, WinForms UI-thread marshal, soft
-  `{ok: false}` errors. No named-pipe listener.
-- Methods: `ping`, `project.get_state`, `project.save`, `track.add`,
-  `media.import`, `media.place`, `event.add_video` / `event.add_audio`,
-  `event.trim` / `event.move` / `event.delete`, `transport.*`
-- MCP: matching FastMCP tools in `server/vegas_director_mcp/`; default
-  transport TCP.
-
-Still needed: load the script from the VEGAS Scripting menu on a real
-machine, leave the dialog open, run the [SETUP.md](SETUP.md) smoke test.
-`render.*` is not Phase 1.
-
-## Phase 2 — Media grounding (not in this tree)
-
-- `probe_media` (ffprobe: duration, resolution, fps, audio)
-- `detect_scenes` (ffmpeg scene-change detection)
-- Optional local Whisper for dialogue-driven cuts
-
-A separate open PR explores editorial primitives (motion, fades, titles,
-envelopes, best-effort render). That is not merged here and is not
-required to run Phase 1.
-
-## Phase 3 — Editorial primitives
-
-- Transitions, basic color FX presets, crossfade helpers
-- Audio ducking envelopes under dialogue
-- A `propose_edit` composite tool (brief + probed clips → place /
-  inspect / revise)
-
-## Phase 4 — Render and delivery
-
-- Render presets (vertical / 16:9 1080p / 4K) with status polling so a
-  long VEGAS render does not block the MCP tool forever
-- End-to-end check against the output file (duration, resolution), not
-  only the render call's return value
+## Phase 4 — Render & delivery
+- Named render presets (vertical / 1080p / 4K) with **async** status polling
+  (do not block the host dialog on multi-minute jobs).
+- End-to-end: raw clips in → verified output file (duration/resolution).
 
 ## Non-goals (for now)
-
-- Full VEGAS UI parity
-- Multi-user / remote collaboration — one local VEGAS instance
-- Auth beyond "do not expose the TCP port"
+- Full VEGAS UI parity — editing/automation surface, not remote desktop.
+- Multi-user/remote collaboration — single local VEGAS instance only.
+- Auth beyond "don't expose the TCP port publicly".

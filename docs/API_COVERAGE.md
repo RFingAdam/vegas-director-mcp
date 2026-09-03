@@ -1,34 +1,50 @@
 # ScriptPortal.Vegas API Coverage
 
-Legend: ✅ in this tree (host + MCP tool) · ⬜ not in this tree
+Legend: ✅ implemented in host · 🟨 partial / best-effort · ⬜ not started
 
-Times are seconds. Soft failures are JSON-RPC **result**
-`{ "ok": false, "error": "..." }` so VEGAS does not crash.
+Based on Magix VEGAS Pro 22 Scripting FAQ patterns (Tracks/Events, Envelopes, Generators, VideoMotion, RenderArgs).
 
-| Area | RPC | MCP tool | Status |
-|---|---|---|---|
-| Health | `ping` | `ping` | ✅ |
-| Project | `project.get_state` | `get_project_state` | ✅ |
-| Project | `project.save` | `save_project` | ✅ |
-| Tracks | `track.add` | `add_track` | ✅ |
-| Media | `media.import` | `import_media` | ✅ |
-| Media | `media.place` | `place_media` | ✅ |
-| Events | `event.add_video` | `add_video_event` | ✅ |
-| Events | `event.add_audio` | `add_audio_event` | ✅ |
-| Events | `event.trim` | `trim_event` | ✅ |
-| Events | `event.move` | `move_event` | ✅ |
-| Events | `event.delete` | `delete_event` | ✅ |
-| Transport | `transport.play` | `transport_play` | ✅ |
-| Transport | `transport.stop` | `transport_stop` | ✅ |
-| Transport | `transport.seek` | `transport_seek` | ✅ |
-| FX / transitions / envelopes / render | — | — | ⬜ |
-| Media probe / scenes / transcript | — | — | ⬜ |
+| Area | MCP / RPC | Status |
+|---|---|---|
+| Health | `ping` | ✅ |
+| Project | `project.get_state` | ✅ (includes `media_path`, `media_name`, `take_offset_seconds`, `take_length_seconds`) |
+| Project | `project.get_selected_events` | ✅ |
+| Project | `project.save` | ✅ |
+| Tracks | `track.add` | ✅ |
+| Tracks | `track.set_composite_level` | ✅ (`VideoTrack.CompositeLevel`) |
+| Media | `media.import`, `media.place` | ✅ |
+| Events | `event.add_video`, `event.add_audio` | ✅ |
+| Events | `event.add_title` | ✅ (Titles & Text + OFX `Text` RTF; SoftFail if generator missing → use PNG overlays) |
+| Events | `event.trim` (+ `take_offset_seconds`), `event.move`, `event.delete` | ✅ |
+| Events | `event.set_motion` | ✅ (VideoMotion keyframes: ScaleBy / MoveBy) |
+| Events | `event.set_fades` | ✅ (Length + CurveType.Smooth; optional Dissolve; `reciprocal_curve`) |
+| Events | `event.set_opacity` | ✅ (`VideoEvent.FadeIn.Gain`) |
+| Envelopes | `envelope.set_points` | ✅ (Volume / CompositeLevel; create if missing) |
+| Transport | `transport.play/stop/seek` | ✅ |
+| Render | `render.start` | 🟨 best-effort `RenderArgs` when `template_name` given; else SoftFail → File > Render As (no fake success) |
+| FX / color / ducking helpers | — | ⬜ Phase 3+ |
+| Async render status polling | — | ⬜ Phase 4 |
 
-`project.get_state` returns `length_seconds`, `video_track_count`,
-`audio_track_count`, `tracks[]` (`index`, `name`, `type`, `event_count`),
-and `events[]` (`track_index`, `event_index`, `start_seconds`,
-`length_seconds`). It does not currently return media paths or take
-offsets.
+Soft failures return JSON-RPC **result** `{ "ok": false, "error": "..." }` (never crash VEGAS).
 
-Validate live against VEGAS Pro 22 after installing the host script.
-See [SETUP.md](SETUP.md).
+## Sample: `event.set_motion`
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "event.set_motion",
+  "params": {
+    "track_index": 0,
+    "event_index": 0,
+    "reset": true,
+    "keyframes": [
+      { "at_seconds": 0, "scale": 1.0, "pan_x": 0, "pan_y": 0 },
+      { "at_seconds": 2.5, "scale": 1.4, "pan_x": -0.6, "pan_y": -0.55 }
+    ]
+  }
+}
+```
+
+The host binds TCP `127.0.0.1:8752` only. Validate live against VEGAS Pro 22
+after **reloading** the host script (Tools > Scripting > VegasDirectorHost).
