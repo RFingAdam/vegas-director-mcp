@@ -22,15 +22,39 @@ public class EntryPoint
     {
         myVegas = vegas;
 
-        // Vegas has no Invoke. A WinForms control created on this (UI) thread
-        // is how we marshal ScriptPortal calls back from the TCP listener.
-        Form marshalForm = new Form();
-        marshalForm.ShowInTaskbar = false;
-        marshalForm.FormBorderStyle = FormBorderStyle.FixedToolWindow;
-        marshalForm.Opacity = 0;
-        marshalForm.Size = new System.Drawing.Size(0, 0);
-        marshalForm.Show();
-        uiMarshal = marshalForm;
+        // Vegas has no Invoke. A visible status Form on this (UI) thread
+        // marshals ScriptPortal calls and keeps the host alive.
+        // MessageBox was easy to lose behind other windows and killed TCP when dismissed.
+        Form status = new Form();
+        status.Text = "vegas-director-mcp host";
+        status.FormBorderStyle = FormBorderStyle.FixedDialog;
+        status.MaximizeBox = false;
+        status.MinimizeBox = true;
+        status.ShowInTaskbar = true;
+        status.StartPosition = FormStartPosition.CenterScreen;
+        status.ClientSize = new System.Drawing.Size(420, 160);
+        status.TopMost = false;
+
+        Label lbl = new Label();
+        lbl.AutoSize = false;
+        lbl.Dock = DockStyle.Fill;
+        lbl.Padding = new Padding(14);
+        lbl.Text =
+            "Host running — TCP 127.0.0.1:" + TcpPort + "\r\n\r\n" +
+            "Minimize this window while you scrub Vegas.\r\n" +
+            "Close it or click Stop host to disconnect MCP.";
+
+        Button stop = new Button();
+        stop.Text = "Stop host";
+        stop.Dock = DockStyle.Bottom;
+        stop.Height = 40;
+        stop.Click += delegate { status.Close(); };
+
+        status.Controls.Add(lbl);
+        status.Controls.Add(stop);
+        status.FormClosed += delegate { running = false; };
+
+        uiMarshal = status;
 
         Log("VegasDirectorHost starting tcp=127.0.0.1:" + TcpPort);
 
@@ -38,15 +62,10 @@ public class EntryPoint
         tcpThread.IsBackground = true;
         tcpThread.Start();
 
-        MessageBox.Show(
-            "vegas-director-mcp host is running.\n\n" +
-            "TCP: 127.0.0.1:" + TcpPort + "\n\n" +
-            "Leave this dialog open while you want external control.\n" +
-            "Closing it stops the listener.",
-            "vegas-director-mcp");
-
+        // Modal status form — survives focus changes; only exits when user stops it.
+        status.ShowDialog();
         running = false;
-        try { marshalForm.Close(); } catch { }
+        try { status.Dispose(); } catch { }
     }
 
     private void RunTcpListener()
@@ -135,6 +154,22 @@ public class EntryPoint
                     return InvokeOnUiThread(req, MoveEvent);
                 case "event.delete":
                     return InvokeOnUiThread(req, DeleteEvent);
+                case "event.set_motion":
+                    return InvokeOnUiThread(req, SetEventMotion);
+                case "event.set_fades":
+                    return InvokeOnUiThread(req, SetEventFades);
+                case "event.set_opacity":
+                    return InvokeOnUiThread(req, SetEventOpacity);
+                case "event.add_title":
+                    return InvokeOnUiThread(req, AddTitleEvent);
+                case "track.set_composite_level":
+                    return InvokeOnUiThread(req, SetTrackCompositeLevel);
+                case "envelope.set_points":
+                    return InvokeOnUiThread(req, SetEnvelopePoints);
+                case "project.get_selected_events":
+                    return InvokeOnUiThread(req, GetSelectedEvents);
+                case "render.start":
+                    return InvokeOnUiThread(req, RenderStart);
                 case "transport.play":
                     return InvokeOnUiThread(req, TransportPlay);
                 case "transport.stop":
@@ -231,11 +266,50 @@ public class EntryPoint
                 TrackEvent ev = t.Events[ei];
                 if (!first) events.Append(",");
                 first = false;
-                events.Append("{\"track_index\":").Append(ti)
-                      .Append(",\"event_index\":").Append(ei)
-                      .Append(",\"start_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.Start)))
-                      .Append(",\"length_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.Length)))
-                      .Append("}");
+                StringBuilder eb = new StringBuilder();
+                eb.Append("{\"track_index\":").Append(ti)
+                  .Append(",\"event_index\":").Append(ei)
+                  .Append(",\"start_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.Start)))
+                  .Append(",\"length_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.Length)));
+                // Soft: media/take fields optional per event
+                try
+                {
+                    Take take = ev.ActiveTake;
+                    if (take != null)
+                    {
+                        try
+                        {
+                            if (take.Offset != null)
+                                eb.Append(",\"take_offset_seconds\":").Append(Json.Num(TimecodeToSeconds(take.Offset)));
+                        }
+                        catch { }
+                        try
+                        {
+                            if (take.Length != null)
+                                eb.Append(",\"take_length_seconds\":").Append(Json.Num(TimecodeToSeconds(take.Length)));
+                        }
+                        catch { }
+                        try
+                        {
+                            Media media = take.Media;
+                            if (media != null && media.FilePath != null && media.FilePath.Length > 0)
+                            {
+                                eb.Append(",\"media_path\":").Append(Json.Str(media.FilePath));
+                                try
+                                {
+                                    string name = Path.GetFileName(media.FilePath);
+                                    if (name != null && name.Length > 0)
+                                        eb.Append(",\"media_name\":").Append(Json.Str(name));
+                                }
+                                catch { }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+                eb.Append("}");
+                events.Append(eb.ToString());
             }
         }
         events.Append("]");
@@ -253,12 +327,19 @@ public class EntryPoint
 
     private string SaveProject(RpcRequest req)
     {
-        string path = Json.GetString(req.ParamsJson, "path");
-        if (path != null && path.Length > 0)
-            myVegas.SaveProject(path);
-        else
-            myVegas.SaveProject();
-        return RpcResponse.Result(req.Id, "{\"ok\":true}");
+        try
+        {
+            string path = Json.GetString(req.ParamsJson, "path");
+            if (path != null && path.Length > 0)
+                myVegas.SaveProject(path);
+            else
+                myVegas.SaveProject();
+            return RpcResponse.Result(req.Id, "{\"ok\":true}");
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "Save failed: " + ex.Message);
+        }
     }
 
     private string AddTrack(RpcRequest req)
@@ -483,6 +564,7 @@ public class EntryPoint
         int eventIndex = Json.GetInt(req.ParamsJson, "event_index", -1);
         double start = Json.GetDouble(req.ParamsJson, "start_seconds", double.NaN);
         double length = Json.GetDouble(req.ParamsJson, "length_seconds", double.NaN);
+        double takeOffset = Json.GetDouble(req.ParamsJson, "take_offset_seconds", double.NaN);
         TrackEvent ev;
         try { ev = GetEvent(project, trackIndex, eventIndex); }
         catch (Exception ex) { return SoftFail(req.Id, ex.Message); }
@@ -492,14 +574,31 @@ public class EntryPoint
                 ev.Start = SecondsToTimecode(start);
             if (!double.IsNaN(length))
                 ev.Length = SecondsToTimecode(length);
+            if (!double.IsNaN(takeOffset))
+            {
+                Take take = ev.ActiveTake;
+                if (take == null)
+                    return SoftFail(req.Id, "No active take to set offset");
+                take.Offset = SecondsToTimecode(takeOffset);
+            }
         }
         catch (Exception ex)
         {
             return SoftFail(req.Id, "Trim failed: " + ex.Message);
         }
-        return RpcResponse.Result(req.Id,
-            "{\"ok\":true,\"start_seconds\":" + Json.Num(TimecodeToSeconds(ev.Start)) +
-            ",\"length_seconds\":" + Json.Num(TimecodeToSeconds(ev.Length)) + "}");
+        StringBuilder trimSb = new StringBuilder();
+        trimSb.Append("{\"ok\":true")
+              .Append(",\"start_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.Start)))
+              .Append(",\"length_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.Length)));
+        try
+        {
+            Take take = ev.ActiveTake;
+            if (take != null && take.Offset != null)
+                trimSb.Append(",\"take_offset_seconds\":").Append(Json.Num(TimecodeToSeconds(take.Offset)));
+        }
+        catch { }
+        trimSb.Append("}");
+        return RpcResponse.Result(req.Id, trimSb.ToString());
     }
 
     private string MoveEvent(RpcRequest req)
@@ -528,6 +627,610 @@ public class EntryPoint
         try { ev.Track.Events.Remove(ev); }
         catch (Exception ex) { return SoftFail(req.Id, "Delete failed: " + ex.Message); }
         return RpcResponse.Result(req.Id, "{\"ok\":true}");
+    }
+
+
+    private static CurveType ParseCurve(string name, CurveType fallback)
+    {
+        if (name == null || name.Length == 0) return fallback;
+        switch (name.Trim().ToLowerInvariant())
+        {
+            case "fast": return CurveType.Fast;
+            case "slow": return CurveType.Slow;
+            case "linear": return CurveType.Linear;
+            case "sharp": return CurveType.Sharp;
+            case "smooth": return CurveType.Smooth;
+            default: return fallback;
+        }
+    }
+
+    private static EnvelopeType? ParseEnvelopeType(string name)
+    {
+        if (name == null) return null;
+        switch (name.Trim().ToLowerInvariant())
+        {
+            case "volume": return EnvelopeType.Volume;
+            case "composite":
+            case "compositelevel":
+            case "composite_level":
+            case "opacity": return EnvelopeType.Composite; // video track composite level
+            case "pan": return EnvelopeType.Pan;
+            case "fadetocolor":
+            case "fade_to_color": return EnvelopeType.FadeToColor;
+            case "mute": return EnvelopeType.Mute;
+            // FadeIn/FadeOut are TrackEvent.Fade* properties, not EnvelopeType
+            default: return null;
+        }
+    }
+
+    private void ResetVideoMotionIdentity(VideoEvent ve)
+    {
+        VideoMotion motion = ve.VideoMotion;
+        // Remove extra keyframes (keep [0] at Position 0)
+        for (int i = motion.Keyframes.Count - 1; i >= 1; i--)
+        {
+            try { motion.Keyframes.RemoveAt(i); } catch { }
+        }
+        VideoMotionKeyframe key0 = motion.Keyframes[0];
+        int w = myVegas.Project.Video.Width;
+        int h = myVegas.Project.Video.Height;
+        try
+        {
+            Take take = ve.ActiveTake;
+            if (take != null && take.Media != null)
+            {
+                MediaStream ms = take.Media.Streams.GetItemByMediaType(MediaType.Video, 0);
+                VideoStream vs = ms as VideoStream;
+                if (vs != null && vs.Width > 0 && vs.Height > 0)
+                {
+                    w = vs.Width;
+                    h = vs.Height;
+                }
+            }
+        }
+        catch { }
+        try
+        {
+            key0.Bounds = new VideoMotionBounds(
+                new VideoMotionVertex(0, 0),
+                new VideoMotionVertex(w, 0),
+                new VideoMotionVertex(w, h),
+                new VideoMotionVertex(0, h));
+        }
+        catch { }
+    }
+
+    private VideoKeyframeType ParseVideoKeyframeType(string name, VideoKeyframeType fallback)
+    {
+        if (name == null || name.Length == 0) return fallback;
+        switch (name.Trim().ToLowerInvariant())
+        {
+            case "linear": return VideoKeyframeType.Linear;
+            case "fast": return VideoKeyframeType.Fast;
+            case "slow": return VideoKeyframeType.Slow;
+            case "smooth": return VideoKeyframeType.Smooth;
+            case "sharp": return VideoKeyframeType.Sharp;
+            case "hold": return VideoKeyframeType.Hold;
+            default: return fallback;
+        }
+    }
+
+    private void GetMediaSize(VideoEvent ve, out int w, out int h)
+    {
+        w = myVegas.Project.Video.Width;
+        h = myVegas.Project.Video.Height;
+        try
+        {
+            Take take = ve.ActiveTake;
+            if (take != null && take.Media != null)
+            {
+                MediaStream ms = take.Media.Streams.GetItemByMediaType(MediaType.Video, 0);
+                VideoStream vs = ms as VideoStream;
+                if (vs != null && vs.Width > 0 && vs.Height > 0)
+                {
+                    w = vs.Width;
+                    h = vs.Height;
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void ApplyMotionKeyframe(VideoMotionKeyframe key, VideoEvent ve, double scale, double panX, double panY,
+                                     string typeName, double smoothness)
+    {
+        // Real Event Pan/Crop zoom: shrink the SOURCE crop rectangle so the output
+        // still fills the frame (no black gaps). ScaleBy+MoveBy was translating the
+        // whole picture on the canvas — Adam's red-arrow bug.
+        if (scale < 1.0) scale = 1.0;
+        if (scale > 3.0) scale = 3.0;
+
+        int w, h;
+        GetMediaSize(ve, out w, out h);
+
+        double cropW = w / scale;
+        double cropH = h / scale;
+        double maxX = Math.Max(0.0, w - cropW);
+        double maxY = Math.Max(0.0, h - cropH);
+        // pan -1..1: -1 = top/left edge of source, 0 = centered, +1 = bottom/right
+        double left = maxX * (panX + 1.0) * 0.5;
+        double top = maxY * (panY + 1.0) * 0.5;
+        if (left < 0) left = 0;
+        if (top < 0) top = 0;
+        if (left > maxX) left = maxX;
+        if (top > maxY) top = maxY;
+
+        float l = (float)left;
+        float tp = (float)top;
+        float r = (float)(left + cropW);
+        float b = (float)(top + cropH);
+        key.Bounds = new VideoMotionBounds(
+            new VideoMotionVertex(l, tp),
+            new VideoMotionVertex(r, tp),
+            new VideoMotionVertex(r, b),
+            new VideoMotionVertex(l, b));
+
+        // Magix temporal interpolation (Smooth/Fast/Slow/Hold/…) + spatial Smoothness
+        try { key.Type = ParseVideoKeyframeType(typeName, VideoKeyframeType.Smooth); } catch { }
+        if (!double.IsNaN(smoothness))
+        {
+            try { key.Smoothness = (float)Math.Max(0.0, Math.Min(1.0, smoothness)); } catch { }
+        }
+    }
+
+    private string SetEventMotion(RpcRequest req)
+    {
+        Project project = RequireProject();
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
+        int eventIndex = Json.GetInt(req.ParamsJson, "event_index", -1);
+        bool reset = Json.GetBool(req.ParamsJson, "reset", true);
+        TrackEvent ev;
+        try { ev = GetEvent(project, trackIndex, eventIndex); }
+        catch (Exception ex) { return SoftFail(req.Id, ex.Message); }
+        VideoEvent ve = ev as VideoEvent;
+        if (ve == null)
+            return SoftFail(req.Id, "event.set_motion requires a VideoEvent");
+
+        try
+        {
+            if (reset)
+                ResetVideoMotionIdentity(ve);
+
+            string arr = Json.GetArray(req.ParamsJson, "keyframes") ?? "[]";
+            System.Collections.Generic.List<string> objs = Json.EnumerateObjects(arr);
+            int added = 0;
+            foreach (string obj in objs)
+            {
+                double at = Json.GetDouble(obj, "at_seconds", 0);
+                double scale = Json.GetDouble(obj, "scale", 1.0);
+                double panX = Json.GetDouble(obj, "pan_x", 0);
+                double panY = Json.GetDouble(obj, "pan_y", 0);
+                string typeName = Json.GetString(obj, "type")
+                    ?? Json.GetString(obj, "curve")
+                    ?? "smooth";
+                double smoothness = Json.GetDouble(obj, "smoothness", 0.5);
+
+                VideoMotionKeyframe key = null;
+                if (at <= 0.0001 && ve.VideoMotion.Keyframes.Count > 0)
+                {
+                    key = ve.VideoMotion.Keyframes[0];
+                }
+                else
+                {
+                    key = new VideoMotionKeyframe(SecondsToTimecode(at));
+                    ve.VideoMotion.Keyframes.Add(key);
+                }
+                ApplyMotionKeyframe(key, ve, scale, panX, panY, typeName, smoothness);
+                added++;
+            }
+            return RpcResponse.Result(req.Id,
+                "{\"ok\":true,\"keyframes_applied\":" + added + ",\"reset\":" + (reset ? "true" : "false") + "}");
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "set_motion failed: " + ex.Message);
+        }
+    }
+
+    private string SetEventFades(RpcRequest req)
+    {
+        Project project = RequireProject();
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
+        int eventIndex = Json.GetInt(req.ParamsJson, "event_index", -1);
+        double fadeIn = Json.GetDouble(req.ParamsJson, "fade_in_seconds", double.NaN);
+        double fadeOut = Json.GetDouble(req.ParamsJson, "fade_out_seconds", double.NaN);
+        bool dissolve = Json.GetBool(req.ParamsJson, "dissolve", false);
+        string curveName = Json.GetString(req.ParamsJson, "curve") ?? "smooth";
+        string reciprocalName = Json.GetString(req.ParamsJson, "reciprocal_curve");
+        CurveType curve = ParseCurve(curveName, CurveType.Smooth);
+
+        TrackEvent ev;
+        try { ev = GetEvent(project, trackIndex, eventIndex); }
+        catch (Exception ex) { return SoftFail(req.Id, ex.Message); }
+
+        try
+        {
+            if (!double.IsNaN(fadeIn))
+            {
+                ev.FadeIn.Length = SecondsToTimecode(fadeIn);
+                ev.FadeIn.Curve = curve;
+                if (reciprocalName != null && reciprocalName.Length > 0)
+                    ev.FadeIn.ReciprocalCurve = ParseCurve(reciprocalName, curve);
+            }
+            if (!double.IsNaN(fadeOut))
+            {
+                ev.FadeOut.Length = SecondsToTimecode(fadeOut);
+                ev.FadeOut.Curve = curve;
+            }
+
+            VideoEvent ve = ev as VideoEvent;
+            if (dissolve && ve != null)
+            {
+                PlugInNode plugIn = myVegas.Transitions.GetChildByName("Dissolve");
+                if (plugIn == null)
+                    return SoftFail(req.Id, "Dissolve transition plug-in not found");
+                if (!double.IsNaN(fadeIn) && fadeIn > 0)
+                {
+                    Effect fxIn = new Effect(plugIn);
+                    ve.FadeIn.Transition = fxIn;
+                }
+                if (!double.IsNaN(fadeOut) && fadeOut > 0)
+                {
+                    Effect fxOut = new Effect(plugIn);
+                    ve.FadeOut.Transition = fxOut;
+                }
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("{\"ok\":true");
+            try { sb.Append(",\"fade_in_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.FadeIn.Length))); } catch { }
+            try { sb.Append(",\"fade_out_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.FadeOut.Length))); } catch { }
+            sb.Append(",\"dissolve\":").Append(dissolve ? "true" : "false");
+            sb.Append("}");
+            return RpcResponse.Result(req.Id, sb.ToString());
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "set_fades failed: " + ex.Message);
+        }
+    }
+
+    private string SetEventOpacity(RpcRequest req)
+    {
+        Project project = RequireProject();
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
+        int eventIndex = Json.GetInt(req.ParamsJson, "event_index", -1);
+        double opacity = Json.GetDouble(req.ParamsJson, "opacity", double.NaN);
+        if (double.IsNaN(opacity))
+            opacity = Json.GetDouble(req.ParamsJson, "gain", double.NaN);
+        if (double.IsNaN(opacity))
+            return SoftFail(req.Id, "params.opacity (0..1) required");
+        if (opacity < 0) opacity = 0;
+        if (opacity > 1) opacity = 1;
+
+        TrackEvent ev;
+        try { ev = GetEvent(project, trackIndex, eventIndex); }
+        catch (Exception ex) { return SoftFail(req.Id, ex.Message); }
+        VideoEvent ve = ev as VideoEvent;
+        if (ve == null)
+            return SoftFail(req.Id, "event.set_opacity requires a VideoEvent");
+        try
+        {
+            // Magix FAQ: individual event opacity via FadeIn.Gain
+            ve.FadeIn.Gain = (float)opacity;
+            return RpcResponse.Result(req.Id,
+                "{\"ok\":true,\"opacity\":" + Json.Num(opacity) + "}");
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "set_opacity failed: " + ex.Message);
+        }
+    }
+
+    private string AddTitleEvent(RpcRequest req)
+    {
+        Project project = RequireProject();
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
+        double start = Json.GetDouble(req.ParamsJson, "start_seconds", 0);
+        double length = Json.GetDouble(req.ParamsJson, "length_seconds", 5);
+        string text = Json.GetString(req.ParamsJson, "text") ?? "";
+        string preset = Json.GetString(req.ParamsJson, "preset") ?? "(Default)";
+
+        if (trackIndex < 0 || trackIndex >= project.Tracks.Count || !project.Tracks[trackIndex].IsVideo())
+            return SoftFail(req.Id, "Invalid video track_index");
+
+        PlugInNode plugIn = null;
+        try { plugIn = myVegas.Generators.GetChildByName("Titles & Text"); } catch { }
+        if (plugIn == null)
+            return SoftFail(req.Id, "Titles & Text generator not found — use PNG overlays as backup");
+
+        try
+        {
+            Media media = new Media(plugIn);
+            try { media.Generator.Preset = preset; } catch { }
+
+            VideoTrack vtrack = (VideoTrack)project.Tracks[trackIndex];
+            VideoEvent ve = vtrack.AddVideoEvent(SecondsToTimecode(start), SecondsToTimecode(length));
+            Take take = ve.AddTake(media.GetVideoStreamByIndex(0));
+
+            // Magix FAQ SetTextForTitle — OFX String "Text" via RichTextBox RTF
+            try
+            {
+                Effect fxTX = ve.ActiveTake.Media.Generator;
+                if (fxTX != null && fxTX.OFXEffect != null)
+                {
+                    OFXEffect ofxTX = fxTX.OFXEffect;
+                    OFXStringParameter parText = ofxTX.FindParameterByName("Text") as OFXStringParameter;
+                    if (parText != null)
+                    {
+                        RichTextBox rbx = new RichTextBox();
+                        try
+                        {
+                            if (parText.Value != null && parText.Value.Length > 0)
+                                rbx.Rtf = parText.Value;
+                        }
+                        catch { }
+                        System.Drawing.Font savedFont = null;
+                        HorizontalAlignment savedAlignment = HorizontalAlignment.Center;
+                        try
+                        {
+                            rbx.SelectAll();
+                            savedFont = rbx.SelectionFont;
+                            savedAlignment = rbx.SelectionAlignment;
+                        }
+                        catch { }
+                        rbx.Rtf = "";
+                        rbx.AppendText(text ?? "");
+                        rbx.SelectAll();
+                        try
+                        {
+                            if (savedFont != null) rbx.SelectionFont = savedFont;
+                            rbx.SelectionAlignment = savedAlignment;
+                        }
+                        catch
+                        {
+                            try
+                            {
+                                rbx.SelectionFont = new System.Drawing.Font("Arial", 48, System.Drawing.FontStyle.Bold);
+                                rbx.SelectionAlignment = HorizontalAlignment.Center;
+                            }
+                            catch { }
+                        }
+                        parText.Value = rbx.Rtf;
+                        try { ofxTX.AllParametersChanged(); } catch { }
+                    }
+                }
+            }
+            catch (Exception tex)
+            {
+                // Title event exists; text set failed — still ok with note
+                return RpcResponse.Result(req.Id,
+                    "{\"ok\":true,\"track_index\":" + trackIndex +
+                    ",\"event_index\":" + (vtrack.Events.Count - 1) +
+                    ",\"start_seconds\":" + Json.Num(start) +
+                    ",\"length_seconds\":" + Json.Num(length) +
+                    ",\"text_set\":false,\"warning\":" + Json.Str(tex.Message) + "}");
+            }
+
+            return RpcResponse.Result(req.Id,
+                "{\"ok\":true,\"track_index\":" + trackIndex +
+                ",\"event_index\":" + (vtrack.Events.Count - 1) +
+                ",\"start_seconds\":" + Json.Num(start) +
+                ",\"length_seconds\":" + Json.Num(length) +
+                ",\"text_set\":true}");
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "add_title failed: " + ex.Message);
+        }
+    }
+
+    private string SetTrackCompositeLevel(RpcRequest req)
+    {
+        Project project = RequireProject();
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
+        double level = Json.GetDouble(req.ParamsJson, "level", double.NaN);
+        if (double.IsNaN(level))
+            level = Json.GetDouble(req.ParamsJson, "composite_level", double.NaN);
+        if (double.IsNaN(level))
+            return SoftFail(req.Id, "params.level (0..1) required");
+        if (level < 0) level = 0;
+        if (level > 1) level = 1;
+        if (trackIndex < 0 || trackIndex >= project.Tracks.Count)
+            return SoftFail(req.Id, "Invalid track_index");
+        VideoTrack vt = project.Tracks[trackIndex] as VideoTrack;
+        if (vt == null)
+            return SoftFail(req.Id, "track.set_composite_level requires a VideoTrack");
+        try
+        {
+            vt.CompositeLevel = (float)level;
+            return RpcResponse.Result(req.Id,
+                "{\"ok\":true,\"track_index\":" + trackIndex + ",\"level\":" + Json.Num(level) + "}");
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "set_composite_level failed: " + ex.Message);
+        }
+    }
+
+    private string SetEnvelopePoints(RpcRequest req)
+    {
+        Project project = RequireProject();
+        int trackIndex = Json.GetInt(req.ParamsJson, "track_index", -1);
+        string typeName = Json.GetString(req.ParamsJson, "envelope_type")
+            ?? Json.GetString(req.ParamsJson, "type")
+            ?? "Volume";
+        EnvelopeType? et = ParseEnvelopeType(typeName);
+        if (et == null)
+            return SoftFail(req.Id, "Unknown envelope_type: " + typeName);
+        if (trackIndex < 0 || trackIndex >= project.Tracks.Count)
+            return SoftFail(req.Id, "Invalid track_index");
+
+        Track track = project.Tracks[trackIndex];
+        try
+        {
+            Envelope envelope = null;
+            try { envelope = track.Envelopes.FindByType(et.Value); } catch { }
+            if (envelope == null)
+            {
+                envelope = new Envelope(et.Value);
+                track.Envelopes.Add(envelope);
+            }
+
+            string arr = Json.GetArray(req.ParamsJson, "points") ?? "[]";
+            System.Collections.Generic.List<string> objs = Json.EnumerateObjects(arr);
+            int added = 0;
+            foreach (string obj in objs)
+            {
+                double at = Json.GetDouble(obj, "at_seconds", 0);
+                double value = Json.GetDouble(obj, "value", envelope.Neutral);
+                string curveName = Json.GetString(obj, "curve") ?? "smooth";
+                CurveType curve = ParseCurve(curveName, CurveType.Smooth);
+                if (value < envelope.Min) value = envelope.Min;
+                if (value > envelope.Max) value = envelope.Max;
+
+                // Skip duplicate positions — update existing if same time
+                EnvelopePoint existing = null;
+                foreach (EnvelopePoint p in envelope.Points)
+                {
+                    try
+                    {
+                        if (Math.Abs(TimecodeToSeconds(p.X) - at) < 0.001)
+                        {
+                            existing = p;
+                            break;
+                        }
+                    }
+                    catch { }
+                }
+                if (existing != null)
+                {
+                    existing.Y = (float)value;
+                    try { existing.Curve = curve; } catch { }
+                }
+                else
+                {
+                    EnvelopePoint pt = new EnvelopePoint(SecondsToTimecode(at), (float)value, curve);
+                    envelope.Points.Add(pt);
+                }
+                added++;
+            }
+            return RpcResponse.Result(req.Id,
+                "{\"ok\":true,\"track_index\":" + trackIndex +
+                ",\"envelope_type\":" + Json.Str(typeName) +
+                ",\"points_applied\":" + added + "}");
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "envelope.set_points failed: " + ex.Message);
+        }
+    }
+
+    private string GetSelectedEvents(RpcRequest req)
+    {
+        Project project = RequireProject();
+        StringBuilder sb = new StringBuilder();
+        sb.Append("{\"ok\":true,\"events\":[");
+        bool first = true;
+        int count = 0;
+        for (int ti = 0; ti < project.Tracks.Count; ti++)
+        {
+            Track t = project.Tracks[ti];
+            for (int ei = 0; ei < t.Events.Count; ei++)
+            {
+                TrackEvent ev = t.Events[ei];
+                if (!ev.Selected) continue;
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"track_index\":").Append(ti)
+                  .Append(",\"event_index\":").Append(ei)
+                  .Append(",\"start_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.Start)))
+                  .Append(",\"length_seconds\":").Append(Json.Num(TimecodeToSeconds(ev.Length)))
+                  .Append("}");
+                count++;
+            }
+        }
+        sb.Append("],\"count\":").Append(count).Append("}");
+        return RpcResponse.Result(req.Id, sb.ToString());
+    }
+
+    private string RenderStart(RpcRequest req)
+    {
+        // Phase 2/4 bridge: best-effort RenderArgs when template is named;
+        // otherwise SoftFail with clear File>Render As guidance (no fake success).
+        string outputPath = Json.GetString(req.ParamsJson, "output_path");
+        string templateName = Json.GetString(req.ParamsJson, "template_name");
+        string rendererName = Json.GetString(req.ParamsJson, "renderer_name");
+        if (outputPath == null || outputPath.Length == 0)
+        {
+            return SoftFail(req.Id,
+                "render.start requires output_path. Long renders can block the host dialog — prefer File > Render As for now, or pass renderer_name + template_name for best-effort API render.");
+        }
+        if ((templateName == null || templateName.Length == 0) &&
+            (rendererName == null || rendererName.Length == 0))
+        {
+            return SoftFail(req.Id,
+                "render.start: pass template_name (and optionally renderer_name) matching an existing VEGAS render template, or use File > Render As. No silent/fake success.");
+        }
+        try
+        {
+            RenderTemplate template = null;
+            string foundRenderer = null;
+            foreach (Renderer renderer in myVegas.Renderers)
+            {
+                string rn = null;
+                try { rn = renderer.FileTypeName; } catch { try { rn = renderer.Name; } catch { } }
+                if (rendererName != null && rendererName.Length > 0)
+                {
+                    bool match = false;
+                    try { if (rn != null && string.Equals(rn, rendererName, StringComparison.OrdinalIgnoreCase)) match = true; } catch { }
+                    try { if (!match && renderer.Name != null && string.Equals(renderer.Name, rendererName, StringComparison.OrdinalIgnoreCase)) match = true; } catch { }
+                    if (!match) continue;
+                }
+                try
+                {
+                    foreach (RenderTemplate t in renderer.Templates)
+                    {
+                        if (templateName == null || templateName.Length == 0 ||
+                            string.Equals(t.Name, templateName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            template = t;
+                            foundRenderer = rn ?? rendererName;
+                            break;
+                        }
+                    }
+                }
+                catch { }
+                if (template != null) break;
+            }
+            if (template == null)
+            {
+                return SoftFail(req.Id,
+                    "Render template not found (renderer_name=" + (rendererName ?? "") +
+                    ", template_name=" + (templateName ?? "") +
+                    "). Create/save a template in VEGAS UI, or use File > Render As.");
+            }
+
+            RenderArgs args = new RenderArgs();
+            args.OutputFile = outputPath;
+            args.RenderTemplate = template;
+            double start = Json.GetDouble(req.ParamsJson, "start_seconds", double.NaN);
+            double length = Json.GetDouble(req.ParamsJson, "length_seconds", double.NaN);
+            if (!double.IsNaN(start)) args.Start = SecondsToTimecode(start);
+            if (!double.IsNaN(length)) args.Length = SecondsToTimecode(length);
+
+            RenderStatus status = myVegas.Render(args);
+            return RpcResponse.Result(req.Id,
+                "{\"ok\":true,\"status\":" + Json.Str(status.ToString()) +
+                ",\"output_path\":" + Json.Str(outputPath) +
+                ",\"renderer\":" + Json.Str(foundRenderer ?? "") +
+                ",\"template\":" + Json.Str(template.Name) + "}");
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id,
+                "Render failed: " + ex.Message + ". Prefer File > Render As for now.");
+        }
     }
 
     private string TransportPlay(RpcRequest req)
@@ -724,5 +1427,94 @@ public static class Json
             }
         }
         return json.Substring(start);
+    }
+
+    public static bool GetBool(string json, string key, bool fallback)
+    {
+        string raw = GetRaw(json, key);
+        if (raw == null) return fallback;
+        raw = raw.Trim().Trim('"').ToLowerInvariant();
+        if (raw == "true" || raw == "1") return true;
+        if (raw == "false" || raw == "0") return false;
+        return fallback;
+    }
+
+    public static string GetArray(string json, string key)
+    {
+        string marker = "\"" + key + "\":";
+        int i = json.IndexOf(marker);
+        if (i < 0) return null;
+        i += marker.Length;
+        while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
+        if (i >= json.Length || json[i] != '[') return null;
+        int depth = 0;
+        int start = i;
+        for (; i < json.Length; i++)
+        {
+            char c = json[i];
+            if (c == '"')
+            {
+                i++;
+                while (i < json.Length)
+                {
+                    if (json[i] == '\\') { i += 2; continue; }
+                    if (json[i] == '"') break;
+                    i++;
+                }
+                continue;
+            }
+            if (c == '[') depth++;
+            else if (c == ']')
+            {
+                depth--;
+                if (depth == 0) return json.Substring(start, i - start + 1);
+            }
+        }
+        return json.Substring(start);
+    }
+
+    public static System.Collections.Generic.List<string> EnumerateObjects(string arrayJson)
+    {
+        var list = new System.Collections.Generic.List<string>();
+        if (arrayJson == null) return list;
+        int i = 0;
+        while (i < arrayJson.Length && arrayJson[i] != '[') i++;
+        if (i >= arrayJson.Length) return list;
+        i++; // past [
+        while (i < arrayJson.Length)
+        {
+            while (i < arrayJson.Length && (char.IsWhiteSpace(arrayJson[i]) || arrayJson[i] == ',')) i++;
+            if (i >= arrayJson.Length || arrayJson[i] == ']') break;
+            if (arrayJson[i] != '{') { i++; continue; }
+            int depth = 0;
+            int start = i;
+            for (; i < arrayJson.Length; i++)
+            {
+                char c = arrayJson[i];
+                if (c == '"')
+                {
+                    i++;
+                    while (i < arrayJson.Length)
+                    {
+                        if (arrayJson[i] == '\\') { i += 2; continue; }
+                        if (arrayJson[i] == '"') break;
+                        i++;
+                    }
+                    continue;
+                }
+                if (c == '{') depth++;
+                else if (c == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        list.Add(arrayJson.Substring(start, i - start + 1));
+                        i++;
+                        break;
+                    }
+                }
+            }
+        }
+        return list;
     }
 }
