@@ -1,41 +1,51 @@
 # Roadmap
 
 ## Phase 0 — Scaffold
-- Done: repo structure, protocol, license.
 
-## Phase 1 — First real round-trip (in progress on VEGAS Pro 22)
-- Host: pipe + TCP 8752, UI-thread marshal, ping/get_state/save/track.add/
-  media.import/event.add_video|audio/trim/move/delete/transport.*
-- MCP: matching FastMCP tools; default transport TCP.
-- Still needed: live load in VEGAS Scripting menu, smoke test, render.*
+Done: repo layout, protocol sketch, MIT license.
 
-## Phase 2 — Media grounding
-- `probe_media` (ffprobe: duration, resolution, fps, audio channel/peak
-  data) for every clip in a source folder.
-- `detect_scenes` (ffmpeg scene-change detection) to give the model real
-  in/out point candidates instead of guessing blindly.
-- Optional: local Whisper transcription for dialogue-driven cut decisions
-  (e.g. "cut on the line where he says X").
+## Phase 1 — First real round-trip (on disk; live VEGAS still operator-owned)
+
+Implemented in this tree:
+
+- Host: TCP `127.0.0.1:8752` only, WinForms UI-thread marshal, soft
+  `{ok: false}` errors. No named-pipe listener.
+- Methods: `ping`, `project.get_state`, `project.save`, `track.add`,
+  `media.import`, `media.place`, `event.add_video` / `event.add_audio`,
+  `event.trim` / `event.move` / `event.delete`, `transport.*`
+- MCP: matching FastMCP tools in `server/vegas_director_mcp/`; default
+  transport TCP.
+
+Still needed: load the script from the VEGAS Scripting menu on a real
+machine, leave the dialog open, run the [SETUP.md](SETUP.md) smoke test.
+`render.*` is not Phase 1.
+
+## Phase 2 — Media grounding (not in this tree)
+
+- `probe_media` (ffprobe: duration, resolution, fps, audio)
+- `detect_scenes` (ffmpeg scene-change detection)
+- Optional local Whisper for dialogue-driven cuts
+
+A separate open PR explores editorial primitives (motion, fades, titles,
+envelopes, best-effort render). That is not merged here and is not
+required to run Phase 1.
 
 ## Phase 3 — Editorial primitives
-- Transitions, basic color-correction FX presets, crossfade helpers.
-- Audio ducking envelope helper (music bed drops under dialogue
-  automatically based on detected speech regions).
-- A `propose_edit` composite tool: given a brief + probed clips, the model
-  can iterate — place events, inspect current timeline state, revise —
-  without needing to hand-compute every timecode itself.
 
-## Phase 4 — Render & delivery
-- Render presets matching common delivery targets (vertical/short-form,
-  16:9 1080p/4K), with real render-status polling (VEGAS renders can be
-  long-running; the MCP tool must not block/timeout on a multi-minute job).
-- End-to-end test: raw clips in → rendered file out, verified by checking
-  the actual output file (duration, resolution) rather than trusting the
-  render call's return code alone.
+- Transitions, basic color FX presets, crossfade helpers
+- Audio ducking envelopes under dialogue
+- A `propose_edit` composite tool (brief + probed clips → place /
+  inspect / revise)
+
+## Phase 4 — Render and delivery
+
+- Render presets (vertical / 16:9 1080p / 4K) with status polling so a
+  long VEGAS render does not block the MCP tool forever
+- End-to-end check against the output file (duration, resolution), not
+  only the render call's return value
 
 ## Non-goals (for now)
-- Full VEGAS UI parity — this is an editing/automation surface, not a
-  general remote-desktop replacement.
-- Multi-user/remote collaboration — single local VEGAS instance only.
-- Any auth/security hardening beyond "don't expose the TCP port publicly" —
-  this is a local automation tool, not a hosted service.
+
+- Full VEGAS UI parity
+- Multi-user / remote collaboration — one local VEGAS instance
+- Auth beyond "do not expose the TCP port"

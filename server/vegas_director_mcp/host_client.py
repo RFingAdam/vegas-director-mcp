@@ -1,15 +1,14 @@
 """Client for the vegas-director MCP <-> VEGAS script host RPC channel.
 
-Two transports are supported:
-  - "pipe": Windows named pipe, same machine as VEGAS (default, lowest
-    latency, no network exposure).
-  - "tcp": loopback TCP, useful when the MCP server runs on a different
-    machine than VEGAS (tunnel it, don't expose it directly -- see
-    docs/PROTOCOL.md).
+from_env() defaults to TCP 127.0.0.1:8752 (VEGAS_HOST_TRANSPORT=tcp).
+That matches host/VegasDirectorHost.cs, which binds loopback TCP only.
 
-This module intentionally has zero VEGAS-specific knowledge -- it is a thin,
-generic JSON-RPC-over-a-stream client. All VEGAS semantics live in the tool
-functions in server/tools.py, which call VegasHostClient.call(method, params).
+A named-pipe client path still exists (VEGAS_HOST_TRANSPORT=pipe,
+\\\\.\\pipe\\vegas-director) for a host that is not in this tree. It
+needs pywin32 on Windows.
+
+This module is a thin JSON-RPC-over-a-stream client. VEGAS method names
+and params live in vegas_director_mcp/tools.py.
 """
 from __future__ import annotations
 

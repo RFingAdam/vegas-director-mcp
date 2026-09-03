@@ -1,99 +1,121 @@
 # vegas-director-mcp
 
-An MCP (Model Context Protocol) server that puts an AI model in the editor's
-chair for **MAGIX VEGAS Pro** — driving the timeline, trimming and ordering
-clips, applying transitions/FX, mixing audio, and rendering output, using
-VEGAS's own scripting API instead of simulating mouse/keyboard input.
+An MCP (Model Context Protocol) server that puts a model in the editor's
+chair for **MAGIX VEGAS Pro** — driving the timeline through VEGAS's own
+scripting API (`ScriptPortal.Vegas`) instead of simulated mouse/keyboard
+input.
 
 Inspired by the pattern used by [Bitwig MCP Server](https://github.com/WeModulate/bitwig-mcp-server)
 for DAWs, and by an early architecture sketch in
 [MarcoRavich/VEGAS-AI-control](https://github.com/MarcoRavich/VEGAS-AI-control)
-(CC0-1.0). This project implements a working system, not just a mapping doc:
-a real in-process script host, a real IPC transport, and a real MCP server —
-plus a media-analysis layer (scene detection, audio levels, transcripts) so
-the model has enough grounding to make actual editorial decisions, not just
-mechanical timeline edits.
+(CC0-1.0). This repo is a working Phase 1 pair: a C# script that runs
+inside VEGAS, and a Python FastMCP server that talks to it over localhost
+TCP.
+
+**Not affiliated with MAGIX.** See [NOTICE](NOTICE).
 
 ## Why this exists
 
 VEGAS Pro has no first-party remote-control or AI API. It does have a mature
-`.NET` scripting surface (`ScriptPortal.Vegas` namespace) used for decades by
-editors writing macro tools. This project exposes that surface over MCP so a
-model can:
+`.NET` scripting surface used for decades by editors writing macro tools.
+This project exposes that surface over MCP.
 
-- Ingest a folder of raw clips and understand what's in each one (duration,
-  resolution, audio peaks, detected scene cuts, optional transcript)
-- Build an edit: place events on tracks, trim in/out points, order clips,
-  add crossfades/transitions, apply basic color/audio FX
-- Add audio ducking / music bed envelopes under dialogue
-- Render the final timeline to a delivery format
-- Iterate — inspect the current timeline state and revise
+**This tree (Phase 1)** can:
 
-The goal is an editor-in-the-loop workflow: the model proposes an edit from
-raw footage plus a brief ("60-second trailer, upbeat, lead with the best
-action shot"), the host executes it inside a real running VEGAS instance,
-and the model can inspect the result and refine it.
+- Inspect the open project (length, tracks, events)
+- Add video/audio tracks
+- Import media into the pool and place it on a track
+- Trim, move, and delete events
+- Play, stop, and seek the transport
+- Save the project
+
+**Later phases** (see [docs/ROADMAP.md](docs/ROADMAP.md)): media probing
+(ffprobe / scene cuts / optional transcript), transitions, FX, envelopes,
+and render. Those tools are not in this tree.
+
+The intended workflow is editor-in-the-loop: the model proposes an edit,
+the host executes it inside a running VEGAS instance, and the model can
+read the timeline back and revise.
 
 ## Architecture
 
-Two processes, one local IPC channel:
+Two processes, one local JSON-RPC channel:
 
 ```
-┌─────────────────────┐        JSON-RPC over          ┌──────────────────────┐
-│   MCP Server         │◄──── named pipe / TCP ───────►│  VEGAS Script Host    │
-│   (Python, FastMCP)  │        (localhost only)        │  (C#, runs inside     │
-│                       │                                │   the VEGAS process)  │
-│  - MCP tool surface   │                                │  - ScriptPortal.Vegas │
-│  - media probing      │                                │    calls              │
-│    (ffprobe/ffmpeg)   │                                │  - executes on the    │
-│  - scene detection    │                                │    UI thread via      │
-│  - optional Whisper   │                                │    Vegas.Invoke()     │
-│    transcription      │                                │                       │
-└─────────────────────┘                                └──────────────────────┘
+┌─────────────────────┐     JSON-RPC / TCP      ┌──────────────────────┐
+│   MCP Server         │◄── 127.0.0.1:8752 ────►│  VEGAS Script Host    │
+│   (Python, FastMCP)  │     (loopback only)     │  (C#, inside VEGAS)   │
+│                       │                         │                       │
+│  server/vegas_director_mcp/                     │  host/VegasDirectorHost.cs
+│  - MCP tool surface   │                         │  - ScriptPortal.Vegas │
+│  - host_client.py     │                         │  - UI-thread marshal  │
+└─────────────────────┘                         └──────────────────────┘
 ```
 
-- The **script host** (`host/VegasDirectorHost.cs`) is loaded into VEGAS via
-  *Tools > Scripting > Run Script*, or auto-loaded via VEGAS's Startup
-  Scripts folder. It opens a local named-pipe (Windows) or TCP loopback
-  listener and marshals every request onto VEGAS's UI thread with
-  `Vegas.Invoke(...)`, since the scripting API is not thread-safe.
-- The **MCP server** (`server/`) is a normal FastMCP process — can run on
-  the same Windows box or anywhere with network access to it. It exposes MCP
-  tools that either call the script host directly (timeline/track/render
-  operations) or do local media analysis (ffprobe, scene-cut detection,
-  transcription) before handing the model grounded facts to reason over.
+- The **script host** (`host/VegasDirectorHost.cs`) is a VEGAS script, not
+  a separate .exe. Copy it into a Script Menu folder and run
+  *Tools > Scripting > VegasDirectorHost*. Leave the dialog open — closing
+  it stops the listener. The host binds **TCP `127.0.0.1:8752` only**. It
+  marshals `ScriptPortal.Vegas` calls onto the UI thread with a hidden
+  WinForms control (`Control.BeginInvoke`). VEGAS scripting has no
+  `Vegas.Invoke`.
+- The **MCP server** (`server/vegas_director_mcp/`) is a stdio FastMCP
+  process. Default client transport is TCP to `127.0.0.1:8752`. Run it on
+  the same Windows machine as VEGAS (or tunnel loopback; do not bind the
+  host off localhost). The Python client still has a named-pipe code path;
+  the current host does not listen on a pipe.
 
-See [`docs/PROTOCOL.md`](docs/PROTOCOL.md) for the wire format and
-[`docs/API_COVERAGE.md`](docs/API_COVERAGE.md) for which `ScriptPortal.Vegas`
-surface is wired up vs. planned.
+Times on the wire are **seconds** (`start_seconds`, `length_seconds`), not
+VEGAS ticks.
+
+See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the wire format and
+[docs/API_COVERAGE.md](docs/API_COVERAGE.md) for what is implemented.
 
 ## Status
 
-Early scaffold. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for build phases.
-Nothing here is production-verified yet — this repo currently defines the
-protocol and skeleton for both processes; connecting them to a real running
-VEGAS instance and validating end-to-end is the first milestone.
+Phase 1 is implemented on disk. It is not production-verified. You still
+need a licensed VEGAS Pro 22 instance on Windows, the host dialog left
+open, and a live smoke test. FX, transitions, envelopes, render, and media
+analysis are not implemented here.
+
+A separate open PR explores Phase 2 editorial primitives. That work is
+not on `main` and is not part of this docs update.
 
 ## Requirements
 
-- VEGAS Pro (18+ recommended; scripting API surface referenced here matches
-  the VEGAS Pro 22 docs) on Windows, with a valid license.
-- .NET Framework matching your VEGAS install's scripting runtime (see VEGAS's
-  own scripting docs for the exact version per release).
+- Windows, with **VEGAS Pro 22** (scripting surface this host was written
+  against) and a valid license. Older 18+ installs may work; they are
+  untested here.
+- No separate C# build. VEGAS compiles the `.cs` script when you run it.
 - Python 3.11+ for the MCP server.
-- `ffmpeg`/`ffprobe` on the machine running the MCP server, for media
-  analysis tools.
+- Same machine as VEGAS (or an SSH tunnel to `127.0.0.1:8752`).
+
+`ffmpeg` / `ffprobe` are **not** required for Phase 1.
 
 ## Quick start
 
-See [`docs/SETUP.md`](docs/SETUP.md).
+[docs/SETUP.md](docs/SETUP.md) — host into the Script Menu, venv, smoke
+test, MCP client snippet.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `host/VegasDirectorHost.cs` | In-process VEGAS script (TCP host) |
+| `server/vegas_director_mcp/` | FastMCP server + JSON-RPC client |
+| `server/requirements.txt` | Python deps (`fastmcp`, `pydantic`, `pywin32` on Windows) |
+| `server/pyproject.toml` | Package metadata (`pip install -e .` from `server/`) |
+| `docs/` | Protocol, API coverage, setup, roadmap |
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE). Initial architecture informed by a CC0-1.0
-reference project (credited above); no code reused verbatim.
+MIT — [LICENSE](LICENSE). Affiliation and trademark notes — [NOTICE](NOTICE).
+
+Initial architecture informed by a CC0-1.0 reference project (credited
+above); no code reused verbatim.
 
 ## Contributing
 
-Issues and PRs welcome. This is a personal project maintained on a best-
-effort basis, not a supported product.
+Issues and PRs welcome. Personal project, best-effort, not a supported
+product. How to run a checkout: [docs/SETUP.md](docs/SETUP.md). Short
+contributor notes: [CONTRIBUTING.md](CONTRIBUTING.md).
