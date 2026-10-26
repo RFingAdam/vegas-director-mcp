@@ -1,9 +1,8 @@
 """Windowed loudness / peak detection for reaction spikes. No VEGAS required."""
 from __future__ import annotations
 
-import audioop
+import array
 import os
-import struct
 import tempfile
 from typing import Any
 
@@ -56,13 +55,18 @@ def _windows(pcm: bytes, sample_rate: int, window_seconds: float) -> list[dict[s
         chunk = pcm[i * width : (i + hop) * width]
         if len(chunk) < width * 4:
             continue
-        # audioop.rms / max on signed 16-bit frames.
-        rms = audioop.rms(chunk, width)
+        samples = array.array("h")
+        samples.frombytes(chunk[: len(chunk) - (len(chunk) % 2)])
+        if not samples:
+            continue
         peak = 0
-        for (sample,) in struct.iter_unpack("<h", chunk[: len(chunk) - (len(chunk) % 2)]):
-            a = abs(sample)
+        acc = 0
+        for sample in samples:
+            a = sample if sample >= 0 else -sample
             if a > peak:
                 peak = a
+            acc += sample * sample
+        rms = int((acc / len(samples)) ** 0.5)
         t = i / sample_rate
         out.append(
             {
@@ -155,8 +159,12 @@ def analyze_audio(
             break
     spikes.sort(key=lambda s: s["at_seconds"])
 
-    # Integrated-ish stats from the PCM (linear 16-bit).
-    global_rms = audioop.rms(pcm, 2)
+    all_samples = array.array("h")
+    all_samples.frombytes(pcm[: len(pcm) - (len(pcm) % 2)])
+    if all_samples:
+        global_rms = int((sum(s * s for s in all_samples) / len(all_samples)) ** 0.5)
+    else:
+        global_rms = 0
     return {
         "ok": True,
         "path": os.path.abspath(path),
