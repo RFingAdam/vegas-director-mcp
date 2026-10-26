@@ -55,3 +55,15 @@ Thumbs.db
 *.log
 logs/
 .pipe_state.json
+
+# --- Host runtime token (generated under %LOCALAPPDATA%, never commit) ---
+token
+**/vegas-director-mcp/token
+
+# --- Local snapshot cruft (patch leftovers, dumps, backups) ---
+*.bak
+*.pre-phase3-*
+_*_dump.txt
+patch_*.py
+host/phase3_handlers.cs.txt
+host/bin/

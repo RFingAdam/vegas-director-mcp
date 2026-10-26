@@ -35,6 +35,11 @@ def ping() -> dict:
     return _call("ping")
 
 
+def host_info() -> dict:
+    """Host version, mode (script vs extension), and request count."""
+    return _call("host.info")
+
+
 def get_project_state() -> dict:
     return _call("project.get_state")
 
@@ -51,8 +56,8 @@ def save_project(path: str | None = None) -> dict:
     return _call("project.save", params)
 
 
-def add_track(type: str = "video", name: str = "") -> dict:
-    return _call("track.add", {"type": type, "name": name})
+def add_track(type: str = "video", name: str = "", index: int | None = None) -> dict:
+    return _call("track.add", {"type": type, "name": name, **({"index": index} if index is not None else {})})
 
 
 def set_track_composite_level(track_index: int, level: float) -> dict:
@@ -184,10 +189,8 @@ def set_motion_keyframes(
 ) -> dict:
     """Set VideoMotion pan/crop keyframes.
 
-    Each keyframe dict: {at_seconds, scale, pan_x, pan_y, type?, smoothness?}
+    Each keyframe dict: {at_seconds, scale, pan_x, pan_y}
     scale 1.0 = no zoom; 1.4 ~= 40% zoom-in. pan_* in -1..1 (neg = left/up).
-    type/curve: linear|fast|slow|smooth|sharp|hold (default smooth).
-    smoothness: 0..1 spatial path curve (default 0.5; 0=linear path).
     """
     return _call(
         "event.set_motion",
@@ -289,3 +292,68 @@ def transport_stop() -> dict:
 
 def transport_seek(seconds: float) -> dict:
     return _call("transport.seek", {"seconds": seconds})
+
+
+# ---------------- Phase 3 (2026-10-22) ----------------
+def new_project(save_current_to: str | None = None, discard_unsaved: bool = False) -> dict:
+    """Close the open project and start an empty one. Saves it first to save_current_to, or needs discard_unsaved=True."""
+    p: dict[str, Any] = {"discard_unsaved": discard_unsaved}
+    if save_current_to: p["save_current_to"] = save_current_to
+    return _call("project.new", p)
+
+
+def open_project(path: str, save_current_to: str | None = None, discard_unsaved: bool = False) -> dict:
+    p: dict[str, Any] = {"path": path, "discard_unsaved": discard_unsaved}
+    if save_current_to: p["save_current_to"] = save_current_to
+    return _call("project.open", p)
+
+
+def list_media() -> dict:
+    """Media pool: path, offline flag, alpha mode, length."""
+    return _call("media.list")
+
+
+def replace_media(old_path: str, new_path: str) -> dict:
+    """Swap every use of old_path for new_path (e.g. an OBS .mkv for its remuxed .mp4)."""
+    return _call("media.replace", {"old_path": old_path, "new_path": new_path})
+
+
+def set_media_alpha(alpha: str = "Straight", path: str | None = None, path_contains: str | None = None) -> dict:
+    """Set the alpha interpretation (Undefined/None/Straight/Premultiplied...) for one file or every file whose path contains a string."""
+    p: dict[str, Any] = {"alpha": alpha}
+    if path: p["path"] = path
+    if path_contains: p["path_contains"] = path_contains
+    return _call("media.set_alpha", p)
+
+
+def set_track_props(track_index: int, name: str | None = None, mute: bool | None = None, solo: bool | None = None,
+                    volume: float | None = None) -> dict:
+    """Rename / mute / solo a track; volume (linear, 1.0 = 0 dB) for audio tracks."""
+    p: dict[str, Any] = {"track_index": track_index}
+    for k, val in (("name", name), ("mute", mute), ("solo", solo), ("volume", volume)):
+        if val is not None: p[k] = val
+    return _call("track.set_props", p)
+
+
+def clear_track_events(track_index: int) -> dict:
+    return _call("track.clear_events", {"track_index": track_index})
+
+
+def clear_envelope(track_index: int, envelope_type: str = "Volume") -> dict:
+    """Remove a track envelope entirely (set_envelope_points only adds/updates points)."""
+    return _call("envelope.clear", {"track_index": track_index, "envelope_type": envelope_type})
+
+
+def set_event_gain(track_index: int, event_index: int, gain_db: float | None = None, gain: float | None = None,
+                   normalize: bool | None = None) -> dict:
+    """Audio event gain (dB or linear) and/or normalize."""
+    p: dict[str, Any] = {"track_index": track_index, "event_index": event_index}
+    if gain_db is not None: p["gain_db"] = gain_db
+    if gain is not None: p["gain"] = gain
+    if normalize is not None: p["normalize"] = normalize
+    return _call("event.set_gain", p)
+
+
+def list_render_templates(renderer_contains: str = "", template_contains: str = "", limit: int = 200) -> dict:
+    """Exact renderer/template names for render_start."""
+    return _call("render.list_templates", {"renderer_contains": renderer_contains, "template_contains": template_contains, "limit": limit})

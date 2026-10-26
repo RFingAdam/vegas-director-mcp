@@ -1,14 +1,11 @@
 """Client for the vegas-director MCP <-> VEGAS script host RPC channel.
 
-from_env() defaults to TCP 127.0.0.1:8752 (VEGAS_HOST_TRANSPORT=tcp).
-That matches host/VegasDirectorHost.cs, which binds loopback TCP only.
+Two transports are supported:
+  - "tcp": loopback TCP (default). The current host listens here.
+  - "pipe": Windows named pipe. Client path exists; the host does not listen.
 
-A named-pipe client path still exists (VEGAS_HOST_TRANSPORT=pipe,
-\\\\.\\pipe\\vegas-director) for a host that is not in this tree. It
-needs pywin32 on Windows.
-
-This module is a thin JSON-RPC-over-a-stream client. VEGAS method names
-and params live in vegas_director_mcp/tools.py.
+Extension-mode hosts require a token (VEGAS_HOST_TOKEN or the runtime file
+under %LOCALAPPDATA%\\vegas-director-mcp\\token). Script-menu mode does not.
 """
 from __future__ import annotations
 
@@ -17,6 +14,35 @@ import os
 import socket
 from dataclasses import dataclass
 from typing import Any
+
+
+LONG_METHODS = {"project.save", "project.new", "project.open", "render.start"}
+
+
+def _token_file_path() -> str:
+    local_app = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_DATA_HOME") or ""
+    if local_app:
+        return os.path.join(local_app, "vegas-director-mcp", "token")
+    return os.path.join(os.path.expanduser("~"), "AppData", "Local", "vegas-director-mcp", "token")
+
+
+def _load_host_token() -> str | None:
+    """Read the runtime token written by the extension host.
+
+    Script-menu mode does not require a token. Extension mode does. The file
+    lives under %LOCALAPPDATA%\\vegas-director-mcp\\token and is never shipped
+    in the repo. Override with VEGAS_HOST_TOKEN.
+    """
+    env = os.environ.get("VEGAS_HOST_TOKEN", "").strip()
+    if env:
+        return env
+    path = _token_file_path()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            token = fh.read().strip()
+        return token or None
+    except OSError:
+        return None
 
 
 class VegasHostError(RuntimeError):
@@ -68,8 +94,12 @@ class VegasHostClient:
             "method": method,
             "params": params or {},
         }
+        token = _load_host_token()
+        if token:
+            request["token"] = token
         line = json.dumps(request) + "\n"
 
+        self._timeout = 1800 if method in LONG_METHODS else float(os.environ.get("VEGAS_HOST_TIMEOUT", "60"))
         raw_response = self._send(line)
         response = json.loads(raw_response.lstrip("\ufeff"))
 
@@ -87,7 +117,7 @@ class VegasHostClient:
 
     def _send_tcp(self, line: str) -> str:
         with socket.create_connection(
-            (self.config.tcp_host, self.config.tcp_port), timeout=30
+            (self.config.tcp_host, self.config.tcp_port), timeout=getattr(self, "_timeout", 60)
         ) as sock:
             sock.sendall(line.encode("utf-8"))
             sock.shutdown(socket.SHUT_WR)
