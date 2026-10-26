@@ -190,10 +190,11 @@ def render_start(
     renderer_name: str | None = None,
     start_seconds: float | None = None,
     length_seconds: float | None = None,
+    async_render: bool = True,
 ) -> dict:
-    """Best-effort RenderArgs render, or soft-fail asking for File>Render As / template names. No fake success."""
+    """Start a VEGAS render. Default async=True uses BeginRender + render_status polling (does not sit on the UI marshal)."""
     return tools.render_start(
-        output_path, template_name, renderer_name, start_seconds, length_seconds
+        output_path, template_name, renderer_name, start_seconds, length_seconds, async_render
     )
 
 
@@ -275,6 +276,222 @@ def set_event_gain(track_index: int, event_index: int, gain_db: float | None = N
 def list_render_templates(renderer_contains: str = "", template_contains: str = "", limit: int = 200) -> dict:
     """List renderer + template names (use the exact names with render_start)."""
     return tools.list_render_templates(renderer_contains, template_contains, limit)
+
+
+@mcp.tool()
+def set_project_video(width: int | None = None, height: int | None = None, frame_rate: float | None = None) -> dict:
+    """Set the open project's video size / frame rate (e.g. 1080x1920 for Shorts)."""
+    return tools.set_project_video(width, height, frame_rate)
+
+
+@mcp.tool()
+def ensure_host(project_path: str | None = None) -> dict:
+    """Reach the live TCP host, or launch VEGAS so the extension /RUNSCRIPT host starts. Reports used_mode."""
+    return tools.ensure_host(project_path)
+
+
+@mcp.tool()
+def probe_media(path: str) -> dict:
+    """ffprobe a media file (duration, size, fps, audio). Does not need VEGAS."""
+    from .analysis.probe import probe_media as _probe
+
+    return _probe(path)
+
+
+@mcp.tool()
+def detect_scenes(path: str, threshold: float = 0.3) -> dict:
+    """ffmpeg scene cuts. Does not need VEGAS."""
+    from .analysis.scenes import detect_scenes as _detect
+
+    return _detect(path, threshold)
+
+
+@mcp.tool()
+def analyze_audio(path: str, spike_ratio: float = 2.2, max_spikes: int = 40) -> dict:
+    """Windowed loudness/peaks for reaction spikes, kill/cash, squad shouting. No VEGAS."""
+    from .analysis.audio import analyze_audio as _audio
+
+    return _audio(path, spike_ratio=spike_ratio, max_spikes=max_spikes)
+
+
+@mcp.tool()
+def transcribe_media(path: str, model_size: str = "base", language: str | None = "en") -> dict:
+    """Optional local Whisper (faster-whisper). Uses GPU if ctranslate2 sees CUDA; else CPU. Soft-fails if not installed."""
+    from .analysis.whisper import transcribe_media as _whisper
+
+    return _whisper(path, model_size=model_size, language=language)
+
+
+@mcp.tool()
+def generate_captions(
+    path: str | None = None,
+    segments: list[dict[str, Any]] | None = None,
+    words: list[dict[str, Any]] | None = None,
+    output_dir: str | None = None,
+    style: str = "shorts",
+    group_words: bool = True,
+) -> dict:
+    """Write SRT + ASS (big high-contrast word groups for 9:16 Shorts). No VEGAS."""
+    from .analysis.captions import generate_captions as _caps
+
+    return _caps(path, segments, words, output_dir, style, group_words)
+
+
+@mcp.tool()
+def burn_captions(media_path: str, ass_path: str, output_path: str | None = None) -> dict:
+    """Burn ASS captions into a new MP4 with ffmpeg. No VEGAS."""
+    from .analysis.captions import burn_captions as _burn
+
+    return _burn(media_path, ass_path, output_path)
+
+
+@mcp.tool()
+def find_highlights(
+    path: str,
+    min_seconds: float = 20.0,
+    max_seconds: float = 35.0,
+    max_candidates: int = 8,
+    scene_threshold: float = 0.3,
+) -> dict:
+    """Rank 20–35 s Short candidates with in/out points and reasons. No VEGAS."""
+    from .analysis.highlights import find_highlights as _hl
+
+    return _hl(path, min_seconds, max_seconds, max_candidates, scene_threshold)
+
+
+@mcp.tool()
+def apply_crossfade(
+    track_index: int,
+    event_index: int,
+    next_event_index: int | None = None,
+    seconds: float = 0.4,
+    dissolve: bool = True,
+) -> dict:
+    """Overlap two events and set reciprocal fades (optional Dissolve)."""
+    from .edit.helpers import apply_crossfade as _xf
+
+    return _xf(track_index, event_index, next_event_index, seconds, dissolve)
+
+
+@mcp.tool()
+def apply_ducking(
+    music_track_index: int,
+    voice_track_index: int,
+    reduction_db: float = -12.0,
+    pad_seconds: float = 0.15,
+) -> dict:
+    """Duck music Volume under voice-track events."""
+    from .edit.helpers import apply_ducking as _duck
+
+    return _duck(music_track_index, voice_track_index, reduction_db, pad_seconds)
+
+
+@mcp.tool()
+def apply_vertical_short(
+    media_path: str,
+    in_seconds: float,
+    out_seconds: float,
+    punch_at_seconds: float | None = None,
+    punch_scale: float = 1.35,
+    caption_cues: list[dict[str, Any]] | None = None,
+    music_path: str | None = None,
+    pan_x: float = 0.0,
+) -> dict:
+    """16:9→9:16 crop/pan, punch-in on the payoff, captions track, loop-friendly fade out."""
+    from .edit.shorts import apply_vertical_short as _short
+
+    return _short(
+        media_path,
+        in_seconds,
+        out_seconds,
+        punch_at_seconds=punch_at_seconds,
+        punch_scale=punch_scale,
+        caption_cues=caption_cues,
+        music_path=music_path,
+        pan_x=pan_x,
+    )
+
+
+@mcp.tool()
+def propose_edit(
+    media_path: str,
+    in_seconds: float | None = None,
+    out_seconds: float | None = None,
+    vertical_short: bool = True,
+    caption_cues: list[dict[str, Any]] | None = None,
+    music_path: str | None = None,
+) -> dict:
+    """Composite: find/accept a window, place, inspect, revise. Default path for a Short."""
+    from .edit.propose import propose_edit as _prop
+
+    return _prop(
+        media_path,
+        in_seconds=in_seconds,
+        out_seconds=out_seconds,
+        vertical_short=vertical_short,
+        caption_cues=caption_cues,
+        music_path=music_path,
+    )
+
+
+@mcp.tool()
+def render_status(job_id: str | None = None) -> dict:
+    """Poll an async VEGAS render started by render_start / render_with_preset."""
+    return tools.render_status(job_id)
+
+
+@mcp.tool()
+def wait_for_render(job_id: str | None = None, timeout_seconds: float = 1800, poll_seconds: float = 1.5) -> dict:
+    """Poll render.status until complete. MCP-side wait; does not block the VEGAS UI thread."""
+    return tools.wait_for_render(job_id, timeout_seconds, poll_seconds)
+
+
+@mcp.tool()
+def render_with_preset(
+    output_path: str,
+    preset: str = "vertical",
+    start_seconds: float | None = None,
+    length_seconds: float | None = None,
+    edit_meta: dict[str, Any] | None = None,
+    wait: bool = True,
+) -> dict:
+    """Named preset (vertical / 1080p / 4k): async render, verify with ffprobe, write sidecar JSON."""
+    return tools.render_with_preset(
+        output_path,
+        preset,
+        start_seconds=start_seconds,
+        length_seconds=length_seconds,
+        edit_meta=edit_meta,
+        wait=wait,
+    )
+
+
+@mcp.tool()
+def verify_output(
+    path: str,
+    expect_width: int | None = None,
+    expect_height: int | None = None,
+    expect_audio: bool = True,
+    expect_duration: float | None = None,
+) -> dict:
+    """ffprobe-check a rendered file (duration, resolution, audio present)."""
+    from .render.sidecar import verify_output as _verify
+
+    return _verify(
+        path,
+        expect_width=expect_width,
+        expect_height=expect_height,
+        expect_audio=expect_audio,
+        expect_duration=expect_duration,
+    )
+
+
+@mcp.tool()
+def write_edit_sidecar(output_path: str, edit_meta: dict[str, Any] | None = None) -> dict:
+    """Write <output>.edit.json (length, hook start, caption style, zoom count, music, template)."""
+    from .render.sidecar import write_sidecar
+
+    return write_sidecar(output_path, edit_meta)
 
 
 def main() -> None:

@@ -30,10 +30,13 @@ Generators, VideoMotion, RenderArgs) and the Application Extensions FAQ
 | Envelopes | `envelope.clear` | ✅ |
 | Transport | `transport.play/stop/seek` | ✅ |
 | Render | `render.list_templates` | ✅ |
-| Render | `render.start` | 🟨 blocking `Vegas.Render(RenderArgs)` when `template_name` given; else SoftFail → File > Render As (no fake success) |
-| Host start | Application Extension / Script Menu | ✅ extension auto-starts the TCP listener; Script Menu is the fallback |
-| FX / color / ducking helpers | — | ⬜ follow-up (media grounding + edit helpers) |
-| Async render status polling | `Vegas.BeginRender` + `RenderProgress` / `RenderFinished` | ⬜ follow-up |
+| Render | `render.start` | ✅ `async=true` (default) uses `Vegas.BeginRender`; `async=false` is blocking `Vegas.Render` |
+| Render | `render.status` | ✅ job_id / state / percent (progress events, no UI-marshal wait) |
+| Project | `project.set_video` | ✅ width / height / frame_rate |
+| Host start | Application Extension / Script Menu / `ensure_host` | ✅ live TCP, `/RUNSCRIPT`, or `/CMDMODULE` path; tools set `used_mode` |
+| Analysis (no VEGAS) | `probe_media`, `detect_scenes`, `analyze_audio`, `transcribe_media`, `generate_captions`, `burn_captions`, `find_highlights` | ✅ |
+| Edit helpers | `apply_crossfade`, `apply_ducking`, `apply_vertical_short`, `propose_edit` | ✅ |
+| Delivery | `render_with_preset`, `verify_output`, sidecar `<output>.edit.json` | ✅ |
 
 Soft failures return JSON-RPC **result** `{ "ok": false, "error": "..." }` (never crash VEGAS).
 

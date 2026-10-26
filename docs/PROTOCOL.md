@@ -91,15 +91,20 @@ Almost every VEGAS-side failure is a JSON-RPC **result** with
 | `transport.stop` | — | |
 | `transport.seek` | `seconds` | cursor position |
 | `render.list_templates` | `renderer_contains?`, `template_contains?`, `limit?` | |
-| `render.start` | `output_path`, `template_name?`, `renderer_name?`, `start_seconds?`, `length_seconds?` | blocking `Vegas.Render` |
+| `render.start` | `output_path`, `template_name?`, `renderer_name?`, `start_seconds?`, `length_seconds?`, `async?` | default `async=true` → `BeginRender` + `job_id` |
+| `render.status` | `job_id?` | `{state, percent, output_path}` |
+| `project.set_video` | `width?`, `height?`, `frame_rate?` | |
 
 MCP tool names are the Python functions in
 `server/vegas_director_mcp/__init__.py` (`get_project_state`,
 `add_track`, `place_media`, `new_project`, …). They are thin wrappers
 over the RPC names above. See [API_COVERAGE.md](API_COVERAGE.md).
 
-Planned, not implemented: media-probe tools, caption / highlight helpers,
-async `render.status`, sidecar metadata.
+Python-only (not host RPC): `probe_media`, `detect_scenes`, `analyze_audio`,
+`transcribe_media`, `generate_captions`, `burn_captions`, `find_highlights`,
+`verify_output`. Helpers `apply_crossfade` / `apply_ducking` /
+`apply_vertical_short` / `propose_edit` / `render_with_preset` compose the
+RPCs above.
 
 ## Threading
 

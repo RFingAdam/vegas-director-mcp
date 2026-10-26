@@ -1,34 +1,15 @@
 """MCP tool definitions backed by the VEGAS script host."""
 from __future__ import annotations
 
+import os
+import time
 from typing import Any
 
-from .host_client import VegasHostClient, VegasHostError
-
-_client = VegasHostClient()
+from .session import get_session
 
 
 def _call(method: str, params: dict[str, Any] | None = None) -> dict:
-    try:
-        result = _client.call(method, params)
-        if isinstance(result, dict):
-            # Host already returns soft {ok:false,error} or success payloads.
-            if "ok" not in result and "error" not in result:
-                result = {"ok": True, **result}
-            return result
-        return {"ok": True, "result": result}
-    except VegasHostError as exc:
-        return {"ok": False, "error": exc.message, "code": exc.code}
-    except (ConnectionRefusedError, FileNotFoundError, OSError, TimeoutError) as exc:
-        return {
-            "ok": False,
-            "error": (
-                "Could not reach the VEGAS script host. Open VEGAS Pro, run "
-                "Tools > Scripting > VegasDirectorHost, leave the dialog open. "
-                f"({exc})"
-            ),
-            "code": -1,
-        }
+    return get_session().call(method, params)
 
 
 def ping() -> dict:
@@ -266,9 +247,10 @@ def render_start(
     renderer_name: str | None = None,
     start_seconds: float | None = None,
     length_seconds: float | None = None,
+    async_render: bool = True,
 ) -> dict:
-    """Best-effort render via RenderArgs, or soft-fail with File>Render As guidance."""
-    params: dict[str, Any] = {}
+    """Start a render. Default is async (Vegas.BeginRender) so the UI marshal returns."""
+    params: dict[str, Any] = {"async": async_render}
     if output_path is not None:
         params["output_path"] = output_path
     if template_name is not None:
@@ -280,6 +262,127 @@ def render_start(
     if length_seconds is not None:
         params["length_seconds"] = length_seconds
     return _call("render.start", params)
+
+
+def render_status(job_id: str | None = None) -> dict:
+    params: dict[str, Any] = {}
+    if job_id:
+        params["job_id"] = job_id
+    return _call("render.status", params)
+
+
+def wait_for_render(
+    job_id: str | None = None,
+    timeout_seconds: float = 1800,
+    poll_seconds: float = 1.5,
+) -> dict:
+    """Poll render.status until complete/failed or timeout. Does not block VEGAS."""
+    deadline = time.time() + timeout_seconds
+    last: dict[str, Any] = {}
+    while time.time() < deadline:
+        last = render_status(job_id)
+        if not last.get("ok") and last.get("code") == -32601:
+            return last
+        state = str(last.get("state") or last.get("status") or "").lower()
+        if state in {"complete", "completed", "done", "success", "finished"}:
+            last = dict(last)
+            last["ok"] = True
+            return last
+        if state in {"failed", "fail", "error", "canceled", "cancelled"}:
+            last = dict(last)
+            last["ok"] = False
+            last.setdefault("error", f"render {state}")
+            return last
+        time.sleep(poll_seconds)
+    last = dict(last or {})
+    last["ok"] = False
+    last["error"] = f"render still running after {timeout_seconds}s"
+    return last
+
+
+def set_project_video(
+    width: int | None = None,
+    height: int | None = None,
+    frame_rate: float | None = None,
+) -> dict:
+    params: dict[str, Any] = {}
+    if width is not None:
+        params["width"] = width
+    if height is not None:
+        params["height"] = height
+    if frame_rate is not None:
+        params["frame_rate"] = frame_rate
+    return _call("project.set_video", params)
+
+
+def ensure_host(project_path: str | None = None) -> dict:
+    """Connect to the live host, or launch VEGAS so the extension / script starts it."""
+    return get_session().ensure(project_path=project_path)
+
+
+def run_oneshot(job: dict[str, Any]) -> dict:
+    """Generate a .cs job and /RUNSCRIPT it. VEGAS GUI still opens (no headless mode)."""
+    return get_session().run_oneshot(job)
+
+
+def render_with_preset(
+    output_path: str,
+    preset: str = "vertical",
+    *,
+    start_seconds: float | None = None,
+    length_seconds: float | None = None,
+    edit_meta: dict[str, Any] | None = None,
+    wait: bool = True,
+    timeout_seconds: float = 1800,
+) -> dict:
+    """Named preset → async render → poll → ffprobe verify → sidecar JSON."""
+    from .render.presets import RENDER_PRESETS, match_preset
+    from .render.sidecar import verify_output, write_sidecar
+
+    spec = RENDER_PRESETS.get(preset.lower())
+    listed = list_render_templates(limit=400)
+    if not listed.get("ok"):
+        return listed
+    matched = match_preset(preset, listed.get("templates") or [])
+    if not matched.get("ok"):
+        return matched
+    started = render_start(
+        output_path=output_path,
+        template_name=matched.get("template_name"),
+        renderer_name=matched.get("renderer_name"),
+        start_seconds=start_seconds,
+        length_seconds=length_seconds,
+        async_render=True,
+    )
+    if not started.get("ok"):
+        return {**started, "preset": matched}
+    job_id = started.get("job_id")
+    status = started
+    if wait:
+        status = wait_for_render(job_id, timeout_seconds=timeout_seconds)
+        if not status.get("ok"):
+            return {**status, "started": started, "preset": matched}
+    verify = None
+    sidecar = None
+    if wait and os.path.isfile(output_path):
+        verify = verify_output(
+            output_path,
+            expect_width=spec["width"] if spec else None,
+            expect_height=spec["height"] if spec else None,
+            expect_audio=True,
+            expect_duration=length_seconds,
+        )
+        sidecar = write_sidecar(output_path, edit_meta, extra={"preset": preset, "verify": verify})
+    return {
+        "ok": bool(status.get("ok")),
+        "used_mode": started.get("used_mode") or status.get("used_mode"),
+        "preset": matched,
+        "started": started,
+        "status": status,
+        "verify": verify,
+        "sidecar": sidecar,
+        "output_path": output_path,
+    }
 
 
 def transport_play() -> dict:

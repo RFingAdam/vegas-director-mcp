@@ -3,8 +3,9 @@
 You need a licensed VEGAS Pro 22 install. The MCP server talks to a C#
 host that runs **inside** VEGAS over TCP `127.0.0.1:8752`.
 
-Media-analysis tools (`probe_media`, Whisper, highlight ranking) are not
-in this tree yet. Do not expect them until the Phase 3/4 follow-up.
+Host tools need VEGAS. `probe_media`, `detect_scenes`, `analyze_audio`,
+`transcribe_media`, `generate_captions`, `find_highlights`, and
+`verify_output` are ffmpeg/Python and work with VEGAS closed.
 
 ## 1. Script host
 
@@ -157,7 +158,22 @@ running, the host failed to start, or something else is bound to 8752.
 `-32001 Unauthorized` in extension mode means the token file is missing
 or `VEGAS_HOST_TOKEN` does not match.
 
-`ffmpeg` is not part of this smoke test.
+### Analysis extras
+
+Put `ffmpeg` + `ffprobe` on PATH (required for probe / scenes / loudness /
+verify). Optional Whisper:
+
+```bat
+pip install -e ".[whisper]"
+```
+
+faster-whisper uses CUDA when ctranslate2 reports a GPU, otherwise CPU
+int8. Missing extra is a soft `{ok:false}` — the rest of the pipeline still
+runs.
+
+Default Short / long-form workflow: [skills/vegas-director/SKILL.md](../skills/vegas-director/SKILL.md).
+
+`ffmpeg` is not required for the host-only smoke test above.
 
 ## 4. If the host is already running an old copy
 

@@ -13,8 +13,10 @@ A stranger can run the host tools with [docs/SETUP.md](docs/SETUP.md):
 3. `server/`: venv, `pip install -r requirements.txt`, `pip install -e .`,
    `python -m vegas_director_mcp`
 
-Do not document or test `probe_media` / Whisper / `find_highlights` /
-async render as if they shipped. Those are the next phase.
+Python tests (no VEGAS): from `server/`, `pip install -e ".[dev]"` then
+`pytest`. They mock the host and generate tiny ffmpeg clips.
+
+Do not describe a GUI-less VEGAS — Pro 22 does not document one.
 
 ## Docs vs code
 
