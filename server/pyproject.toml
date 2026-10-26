@@ -11,7 +11,12 @@ dependencies = [
 
 [project.optional-dependencies]
 windows = ["pywin32>=306"]
+whisper = ["faster-whisper>=1.0.3"]
 dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
 
 [build-system]
 requires = ["setuptools>=68"]

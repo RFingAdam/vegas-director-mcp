@@ -23,6 +23,13 @@ public partial class EntryPoint
     private string mode = "script";
     private string authToken = null;                       // required in extension mode
     internal Func<RpcRequest, string> v2Dispatch = null;  // reserved for future host modules
+    private readonly object renderGate = new object();
+    private string renderJobId = "";
+    private string renderState = "idle";
+    private int renderPercent = 0;
+    private string renderOutput = "";
+    private string renderError = "";
+    private bool renderHooksAttached = false;
 
     // Called by the VegasDirector Application Extension at VEGAS startup (no dialog).
     public void StartHeadless(Vegas vegas, Control marshal)
@@ -239,6 +246,10 @@ public partial class EntryPoint
                     return InvokeOnUiThread(req, GetSelectedEvents);
                 case "render.start":
                     return InvokeOnUiThread(req, RenderStart);
+                case "render.status":
+                    return RenderStatusQuery(req);
+                case "project.set_video":
+                    return InvokeOnUiThread(req, SetProjectVideo);
                 case "transport.play":
                     return InvokeOnUiThread(req, TransportPlay);
                 case "transport.stop":
@@ -414,9 +425,16 @@ public partial class EntryPoint
         }
         events.Append("]");
 
+        int vw = 0, vh = 0;
+        double fps = 0;
+        try { vw = project.Video.Width; vh = project.Video.Height; fps = project.Video.FrameRate; } catch { }
+
         StringBuilder sb = new StringBuilder();
         sb.Append("{\"ok\":true")
           .Append(",\"length_seconds\":").Append(Json.Num(TimecodeToSeconds(project.Length)))
+          .Append(",\"video_width\":").Append(vw)
+          .Append(",\"video_height\":").Append(vh)
+          .Append(",\"frame_rate\":").Append(Json.Num(fps))
           .Append(",\"video_track_count\":").Append(videoTracks)
           .Append(",\"audio_track_count\":").Append(audioTracks)
           .Append(",\"tracks\":").Append(tracks)
@@ -1320,17 +1338,136 @@ public partial class EntryPoint
             if (!double.IsNaN(start)) args.Start = SecondsToTimecode(start);
             if (!double.IsNaN(length)) args.Length = SecondsToTimecode(length);
 
-            RenderStatus status = myVegas.Render(args);
+            bool asyncRender = Json.GetBool(req.ParamsJson, "async", true);
+            if (!asyncRender)
+            {
+                RenderStatus status = myVegas.Render(args);
+                return RpcResponse.Result(req.Id,
+                    "{\"ok\":true,\"async\":false,\"status\":" + Json.Str(status.ToString()) +
+                    ",\"state\":" + Json.Str(status.ToString()) +
+                    ",\"output_path\":" + Json.Str(outputPath) +
+                    ",\"renderer\":" + Json.Str(foundRenderer ?? "") +
+                    ",\"template\":" + Json.Str(template.Name) + "}");
+            }
+
+            // Vegas.BeginRender starts the encode and returns; progress comes in
+            // RenderProgress / RenderFinished. Do not call the blocking Render()
+            // on the UI-marshal wait — that froze the host dialog for minutes.
+            string jobId = Guid.NewGuid().ToString("N").Substring(0, 8);
+            lock (renderGate)
+            {
+                renderJobId = jobId;
+                renderState = "running";
+                renderPercent = 0;
+                renderOutput = outputPath;
+                renderError = "";
+            }
+            EnsureRenderHooks();
+            RenderStatus began = myVegas.BeginRender(args);
             return RpcResponse.Result(req.Id,
-                "{\"ok\":true,\"status\":" + Json.Str(status.ToString()) +
+                "{\"ok\":true,\"async\":true,\"job_id\":" + Json.Str(jobId) +
+                ",\"state\":\"running\",\"status\":" + Json.Str(began.ToString()) +
                 ",\"output_path\":" + Json.Str(outputPath) +
                 ",\"renderer\":" + Json.Str(foundRenderer ?? "") +
                 ",\"template\":" + Json.Str(template.Name) + "}");
         }
         catch (Exception ex)
         {
+            lock (renderGate) { renderState = "failed"; renderError = ex.Message; }
             return SoftFail(req.Id,
                 "Render failed: " + ex.Message + ". Prefer File > Render As for now.");
+        }
+    }
+
+    private void EnsureRenderHooks()
+    {
+        if (renderHooksAttached) return;
+        myVegas.RenderProgress += OnRenderProgress;
+        myVegas.RenderFinished += OnRenderFinished;
+        renderHooksAttached = true;
+    }
+
+    private void OnRenderProgress(object sender, RenderStatusEventArgs e)
+    {
+        try
+        {
+            lock (renderGate)
+            {
+                renderPercent = e.PercentComplete;
+                if (renderState == "idle") renderState = "running";
+            }
+        }
+        catch { }
+    }
+
+    private void OnRenderFinished(object sender, RenderStatusEventArgs e)
+    {
+        try
+        {
+            string st = "";
+            try { st = e.Status.ToString(); } catch { }
+            lock (renderGate)
+            {
+                if (st.IndexOf("Complete", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    st.IndexOf("Finish", StringComparison.OrdinalIgnoreCase) >= 0)
+                    renderState = "complete";
+                else if (st.IndexOf("Cancel", StringComparison.OrdinalIgnoreCase) >= 0)
+                    renderState = "cancelled";
+                else
+                    renderState = "failed";
+                try
+                {
+                    if (e.ErrorMessage != null && e.ErrorMessage.Length > 0)
+                        renderError = e.ErrorMessage;
+                }
+                catch { }
+                renderPercent = 100;
+            }
+        }
+        catch
+        {
+            lock (renderGate) { renderState = "failed"; }
+        }
+    }
+
+    private string RenderStatusQuery(RpcRequest req)
+    {
+        string want = Json.GetString(req.ParamsJson, "job_id");
+        lock (renderGate)
+        {
+            if (want != null && want.Length > 0 && renderJobId.Length > 0 &&
+                !string.Equals(want, renderJobId, StringComparison.OrdinalIgnoreCase))
+            {
+                return SoftFail(req.Id, "unknown job_id (host keeps one active render)");
+            }
+            return RpcResponse.Result(req.Id,
+                "{\"ok\":true,\"job_id\":" + Json.Str(renderJobId) +
+                ",\"state\":" + Json.Str(renderState) +
+                ",\"percent\":" + renderPercent +
+                ",\"output_path\":" + Json.Str(renderOutput) +
+                ",\"error\":" + Json.Str(renderError) + "}");
+        }
+    }
+
+    private string SetProjectVideo(RpcRequest req)
+    {
+        Project project = RequireProject();
+        int w = Json.GetInt(req.ParamsJson, "width", 0);
+        int h = Json.GetInt(req.ParamsJson, "height", 0);
+        double fps = Json.GetDouble(req.ParamsJson, "frame_rate", double.NaN);
+        try
+        {
+            if (w > 0) project.Video.Width = w;
+            if (h > 0) project.Video.Height = h;
+            if (!double.IsNaN(fps) && fps > 0) project.Video.FrameRate = fps;
+            return RpcResponse.Result(req.Id,
+                "{\"ok\":true,\"width\":" + project.Video.Width +
+                ",\"height\":" + project.Video.Height +
+                ",\"frame_rate\":" + Json.Num(project.Video.FrameRate) + "}");
+        }
+        catch (Exception ex)
+        {
+            return SoftFail(req.Id, "project.set_video failed: " + ex.Message);
         }
     }
 
