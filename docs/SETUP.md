@@ -1,17 +1,54 @@
 # Setup (VEGAS Pro 22 on Windows)
 
-Phase 1 only. You need a licensed VEGAS Pro 22 install. The MCP server
-talks to a script that runs **inside** VEGAS over TCP `127.0.0.1:8752`.
+You need a licensed VEGAS Pro 22 install. The MCP server talks to a C#
+host that runs **inside** VEGAS over TCP `127.0.0.1:8752`.
 
-Phase 2 (media probing, or the separate editorial-primitives PR) is not
-in this tree. Do not expect `probe_media`, FX, or render tools.
+Media-analysis tools (`probe_media`, Whisper, highlight ranking) are not
+in this tree yet. Do not expect them until the Phase 3/4 follow-up.
 
 ## 1. Script host
+
+Pick **one**. The extension is the default path; the Script Menu copy is
+the fallback if you do not want to compile a DLL.
+
+### A. Application Extension (auto-start, preferred)
+
+VEGAS Pro 22 loads compiled `ICustomCommandModule` assemblies from
+`Documents\Vegas Application Extensions` (and a few AppData/ProgramData
+siblings) at startup and keeps them loaded for the process lifetime.
+That is documented under *Using Scripting → VEGAS Pro extensions* and the
+Application Extensions FAQ.
+
+1. Close VEGAS if it is open (the DLL is locked while loaded).
+2. From the repo root:
+
+   ```bat
+   powershell -ExecutionPolicy Bypass -File host\build.ps1
+   ```
+
+   `build.ps1` compiles `VegasDirectorHost.cs` + `VegasDirectorExtension.cs`
+   against `C:\Program Files\VEGAS\VEGAS Pro 22.0\ScriptPortal.Vegas.dll`
+   and copies `VegasDirector.dll` to
+   `%USERPROFILE%\Documents\Vegas Application Extensions\`. It also copies
+   the `.cs` host into `%USERPROFILE%\Documents\Vegas Script Menu\` as a
+   manual fallback.
+3. Start **VEGAS Pro 22**. The host should already be listening — no
+   *Tools > Scripting* step.
+4. Optional status pane: *View > Extensions > Vegas Director Host*.
+5. Extension mode writes a per-user token to
+   `%LOCALAPPDATA%\vegas-director-mcp\token` (created on first start,
+   readable only by this Windows user). The MCP client sends it
+   automatically. **Do not commit that file.**
+
+If `csc.exe` is missing, use Script Menu mode below.
+
+### B. Script Menu fallback
 
 No Visual Studio project. VEGAS compiles `VegasDirectorHost.cs` when you
 run it from the Scripting menu.
 
 1. Copy `host/VegasDirectorHost.cs` into a Script Menu folder:
+   - `%USERPROFILE%\Documents\Vegas Script Menu\` (preferred), or
    - `C:\Program Files\VEGAS\VEGAS Pro 22.0\Script Menu\` (often needs
      admin), or
    - A user-writable folder listed under
@@ -19,14 +56,19 @@ run it from the Scripting menu.
 2. Open **VEGAS Pro 22** and create or open a project. The host refuses
    most calls if no project is active (`ok: false`).
 3. *Tools > Scripting > VegasDirectorHost*
-   - If the item is missing, restart VEGAS so it rescans the Script Menu.
+   - If the item is missing, *Tools > Scripting > Rescan Script Menu Folder*
+     or restart VEGAS.
 4. Leave the dialog open. Closing it stops the listener.
-5. Confirm the dialog says `TCP: 127.0.0.1:8752`.
-6. Logs: `%LOCALAPPDATA%\vegas-director-mcp\host.log`
+5. If the extension is already listening, the script exits with a
+   "already running" message instead of binding a second port.
+
+Script-menu mode does **not** require the token.
+
+Logs for both modes: `%LOCALAPPDATA%\vegas-director-mcp\host.log`.
 
 The current host does **not** open `\\.\pipe\vegas-director`. If you
-re-copy the `.cs` file after a git pull, close the old dialog and run
-the script again.
+re-copy the `.cs` file after a git pull, close the old dialog (or restart
+VEGAS so the extension reloads) and try again.
 
 ## 2. MCP server (same Windows PC)
 
@@ -61,6 +103,8 @@ MCP server.
 | `VEGAS_HOST_ADDRESS` | `127.0.0.1` | TCP host |
 | `VEGAS_HOST_PORT` | `8752` | TCP port |
 | `VEGAS_HOST_PIPE_NAME` | `vegas-director` | Unused unless transport is `pipe` |
+| `VEGAS_HOST_TIMEOUT` | `60` | Seconds for ordinary RPCs (`project.save` / `new` / `open` / `render.start` use 1800) |
+| `VEGAS_HOST_TOKEN` | *(file)* | Override the extension token. Otherwise the client reads `%LOCALAPPDATA%\vegas-director-mcp\token` when that file exists. |
 
 ### MCP client snippet
 
@@ -86,25 +130,41 @@ Cursor / Claude Desktop-style config. Use the venv interpreter and the
 
 Replace `C:\\path\\to\\vegas-director-mcp` with your clone path.
 
+Or, from the repo root after the venv exists:
+
+```bat
+py -3 scripts\register_claude.py
+```
+
+That writes the snippet above using this checkout's paths. Restart Claude
+Desktop afterwards.
+
 ## 3. Smoke test
 
-With the host dialog still open:
+With the host listening (extension at VEGAS startup, or the Script Menu
+dialog still open):
 
 ```bat
 cd <clone>\server
 .venv\Scripts\activate
 set VEGAS_HOST_TRANSPORT=tcp
-python -c "from vegas_director_mcp.tools import ping, get_project_state; print(ping()); print(get_project_state())"
+python -c "from vegas_director_mcp.tools import ping, host_info, get_project_state; print(ping()); print(host_info()); print(get_project_state())"
 ```
 
-Success looks like `ok: true` plus `video_track_count` / `audio_track_count`
-/ `tracks`. A connection error means the dialog is closed, VEGAS is not
-running, or something else is bound to 8752.
+Success looks like `ok: true` plus `mode` (`extension` or `script`) plus
+`video_track_count` / `tracks`. A connection error means VEGAS is not
+running, the host failed to start, or something else is bound to 8752.
+`-32001 Unauthorized` in extension mode means the token file is missing
+or `VEGAS_HOST_TOKEN` does not match.
 
 `ffmpeg` is not part of this smoke test.
 
 ## 4. If the host is already running an old copy
 
-1. Close the vegas-director-mcp MessageBox (that stops the listener).
+**Extension:** close VEGAS, re-run `host\build.ps1`, start VEGAS again.
+
+**Script Menu:**
+
+1. Close the vegas-director-mcp status window (that stops the listener).
 2. Replace `VegasDirectorHost.cs` in the Script Menu folder.
 3. *Tools > Scripting > VegasDirectorHost* again.

@@ -8,9 +8,8 @@ input.
 Inspired by the pattern used by [Bitwig MCP Server](https://github.com/WeModulate/bitwig-mcp-server)
 for DAWs, and by an early architecture sketch in
 [MarcoRavich/VEGAS-AI-control](https://github.com/MarcoRavich/VEGAS-AI-control)
-(CC0-1.0). This repo is a working Phase 1 pair: a C# script that runs
-inside VEGAS, and a Python FastMCP server that talks to it over localhost
-TCP.
+(CC0-1.0). This repo is a working pair: a C# host that runs inside VEGAS,
+and a Python FastMCP server that talks to it over localhost TCP.
 
 **Not affiliated with MAGIX.** See [NOTICE](NOTICE).
 
@@ -18,28 +17,47 @@ TCP.
 
 VEGAS Pro has no first-party remote-control or AI API. It does have a mature
 `.NET` scripting surface used for decades by editors writing macro tools.
-This project exposes that surface over MCP.
-
-**This tree (Phase 1)** can:
-
-- Inspect the open project (length, tracks, events)
-- Add video/audio tracks
-- Import media into the pool and place it on a track
-- Trim, move, and delete events
-- Play, stop, and seek the transport
-- Save the project
-
-**Later phases** (see [docs/ROADMAP.md](docs/ROADMAP.md)): media probing
-(ffprobe / scene cuts / optional transcript), transitions, FX, envelopes,
-and render. Those tools are not in this tree.
+This project exposes that surface over MCP so Claude / Grok Bot can cut
+Shorts and long-form for a gaming channel (16:9 sources cropped to 9:16)
+and promo spots.
 
 The intended workflow is editor-in-the-loop: the model proposes an edit,
 the host executes it inside a running VEGAS instance, and the model can
 read the timeline back and revise.
 
-## Architecture
+## What is implemented
 
-Two processes, one local JSON-RPC channel:
+**Host + MCP tools (Phases 1–2 plus the Oct 2026 host-side Phase 3 tools):**
+
+- Inspect the open project (length, tracks, events, media paths, take offsets)
+- New / open / save project; list / replace / alpha-tag media
+- Add video/audio tracks (optional insert index); rename, mute, solo, volume
+- Import media, place it, trim / move / delete events, set event gain
+- VideoMotion pan/crop keyframes, fades, opacity, Titles & Text
+- Volume / CompositeLevel envelopes (set points or clear)
+- Play, stop, seek; list render templates; best-effort `render.start`
+- `host.info` reports script-dialog vs extension mode
+
+**Two ways to start the host** (same TCP interface):
+
+1. **Application Extension (preferred).** `host/build.ps1` compiles
+   `VegasDirector.dll` and installs it under
+   `Documents\Vegas Application Extensions`. VEGAS Pro 22 loads
+   `ICustomCommandModule` at startup and keeps it for the process lifetime,
+   so nobody has to open *Tools > Scripting*. Extension mode requires the
+   runtime token at `%LOCALAPPDATA%\vegas-director-mcp\token`.
+2. **Script Menu fallback.** Copy `host/VegasDirectorHost.cs` into a Script
+   Menu folder and run *Tools > Scripting > VegasDirectorHost*. Leave the
+   dialog open. No token required.
+
+The host binds **TCP `127.0.0.1:8752` only**.
+
+**Not in this tree yet** (see [docs/ROADMAP.md](docs/ROADMAP.md)): ffprobe /
+scene / loudness / Whisper media grounding, caption generation,
+`find_highlights`, crossfade / duck helpers, the vertical Short template,
+`propose_edit`, async render polling, and the edit-metadata sidecar.
+
+## Architecture
 
 ```
 ┌─────────────────────┐     JSON-RPC / TCP      ┌──────────────────────┐
@@ -52,59 +70,40 @@ Two processes, one local JSON-RPC channel:
 └─────────────────────┘                         └──────────────────────┘
 ```
 
-- The **script host** (`host/VegasDirectorHost.cs`) is a VEGAS script, not
-  a separate .exe. Copy it into a Script Menu folder and run
-  *Tools > Scripting > VegasDirectorHost*. Leave the dialog open — closing
-  it stops the listener. The host binds **TCP `127.0.0.1:8752` only**. It
-  marshals `ScriptPortal.Vegas` calls onto the UI thread with a hidden
-  WinForms control (`Control.BeginInvoke`). VEGAS scripting has no
-  `Vegas.Invoke`.
-- The **MCP server** (`server/vegas_director_mcp/`) is a stdio FastMCP
-  process. Default client transport is TCP to `127.0.0.1:8752`. Run it on
-  the same Windows machine as VEGAS (or tunnel loopback; do not bind the
-  host off localhost). The Python client still has a named-pipe code path;
-  the current host does not listen on a pipe.
-
 Times on the wire are **seconds** (`start_seconds`, `length_seconds`), not
 VEGAS ticks.
 
 See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the wire format and
 [docs/API_COVERAGE.md](docs/API_COVERAGE.md) for what is implemented.
 
-## Status
-
-Phase 1 is implemented on disk. It is not production-verified. You still
-need a licensed VEGAS Pro 22 instance on Windows, the host dialog left
-open, and a live smoke test. FX, transitions, envelopes, render, and media
-analysis are not implemented here.
-
-A separate open PR explores Phase 2 editorial primitives. That work is
-not on `main` and is not part of this docs update.
-
 ## Requirements
 
 - Windows, with **VEGAS Pro 22** (scripting surface this host was written
   against) and a valid license. Older 18+ installs may work; they are
   untested here.
-- No separate C# build. VEGAS compiles the `.cs` script when you run it.
-- Python 3.11+ for the MCP server.
-- Same machine as VEGAS (or an SSH tunnel to `127.0.0.1:8752`).
+- Python 3.11+ for the MCP server, same machine as VEGAS (or an SSH tunnel
+  to `127.0.0.1:8752`).
+- Optional: .NET Framework 4.x `csc.exe` if you want the Application
+  Extension DLL (`host/build.ps1`). Script Menu mode does not need a compile
+  — VEGAS compiles the `.cs` when you run it.
 
-`ffmpeg` / `ffprobe` are **not** required for Phase 1.
+`ffmpeg` / `ffprobe` are **not** required for the host tools in this tree.
 
 ## Quick start
 
-[docs/SETUP.md](docs/SETUP.md) — host into the Script Menu, venv, smoke
-test, MCP client snippet.
+[docs/SETUP.md](docs/SETUP.md) — extension or Script Menu, venv, smoke
+test, Claude Desktop registration.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `host/VegasDirectorHost.cs` | In-process VEGAS script (TCP host) |
+| `host/VegasDirectorHost.cs` | In-process VEGAS script / TCP host |
+| `host/VegasDirectorExtension.cs` | `ICustomCommandModule` auto-start wrapper |
+| `host/build.ps1` | Compile + install the extension DLL |
+| `host/reflect_api.ps1` | Optional ScriptPortal.Vegas reflection helper |
 | `server/vegas_director_mcp/` | FastMCP server + JSON-RPC client |
-| `server/requirements.txt` | Python deps (`fastmcp`, `pydantic`, `pywin32` on Windows) |
-| `server/pyproject.toml` | Package metadata (`pip install -e .` from `server/`) |
+| `scripts/register_claude.py` | Write Claude Desktop MCP config from this checkout |
 | `docs/` | Protocol, API coverage, setup, roadmap |
 
 ## License

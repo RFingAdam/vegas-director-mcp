@@ -2,9 +2,7 @@
 
 Run with: python -m vegas_director_mcp
 
-Default host transport is TCP 127.0.0.1:8752 (VEGAS_HOST_TRANSPORT,
-VEGAS_HOST_ADDRESS, VEGAS_HOST_PORT). The current VEGAS script host
-listens on TCP only.
+Default transport is TCP 127.0.0.1:8752 (set VEGAS_HOST_TRANSPORT=pipe for named pipe).
 """
 from __future__ import annotations
 
@@ -19,8 +17,14 @@ mcp = FastMCP("vegas-director-mcp")
 
 @mcp.tool()
 def ping() -> dict:
-    """Ping the VEGAS script host. Use this to verify the host dialog is open."""
+    """Ping the VEGAS script host. Use this to verify the host is listening."""
     return tools.ping()
+
+
+@mcp.tool()
+def host_info() -> dict:
+    """Host version, mode (script vs extension), and request count."""
+    return tools.host_info()
 
 
 @mcp.tool()
@@ -42,9 +46,9 @@ def save_project(path: str | None = None) -> dict:
 
 
 @mcp.tool()
-def add_track(type: str = "video", name: str = "") -> dict:
+def add_track(type: str = "video", name: str = "", index: int | None = None) -> dict:
     """Add a video or audio track. type is 'video' or 'audio'."""
-    return tools.add_track(type=type, name=name)
+    return tools.add_track(type=type, name=name, index=index)
 
 
 @mcp.tool()
@@ -137,7 +141,7 @@ def set_motion_keyframes(
     keyframes: list[dict[str, Any]],
     reset: bool = True,
 ) -> dict:
-    """Set VideoMotion pan/crop keyframes. Each item: {at_seconds, scale, pan_x, pan_y, type?, smoothness?}. type=linear|fast|slow|smooth|sharp|hold; smoothness 0..1."""
+    """Set VideoMotion pan/crop keyframes. Each item: {at_seconds, scale, pan_x, pan_y}. scale 1.0=identity; 1.4~=zoom-in. pan -1..1."""
     return tools.set_motion_keyframes(track_index, event_index, keyframes, reset)
 
 
@@ -209,6 +213,68 @@ def transport_stop() -> dict:
 def transport_seek(seconds: float) -> dict:
     """Move the cursor to an absolute time in seconds."""
     return tools.transport_seek(seconds)
+
+
+@mcp.tool()
+def new_project(save_current_to: str | None = None, discard_unsaved: bool = False) -> dict:
+    """Start an empty VEGAS project. Saves the open one to save_current_to first, or pass discard_unsaved=True."""
+    return tools.new_project(save_current_to, discard_unsaved)
+
+
+@mcp.tool()
+def open_project(path: str, save_current_to: str | None = None, discard_unsaved: bool = False) -> dict:
+    """Open a .veg (saves or discards the open project first)."""
+    return tools.open_project(path, save_current_to, discard_unsaved)
+
+
+@mcp.tool()
+def list_media() -> dict:
+    """List the media pool with offline status and alpha mode."""
+    return tools.list_media()
+
+
+@mcp.tool()
+def replace_media(old_path: str, new_path: str) -> dict:
+    """Replace every use of one media file with another (e.g. .mkv -> remuxed .mp4)."""
+    return tools.replace_media(old_path, new_path)
+
+
+@mcp.tool()
+def set_media_alpha(alpha: str = "Straight", path: str | None = None, path_contains: str | None = None) -> dict:
+    """Set alpha interpretation for a file or every file whose path contains a string."""
+    return tools.set_media_alpha(alpha, path, path_contains)
+
+
+@mcp.tool()
+def set_track_props(track_index: int, name: str | None = None, mute: bool | None = None, solo: bool | None = None,
+                    volume: float | None = None) -> dict:
+    """Rename/mute/solo a track, or set an audio track's volume (linear, 1.0 = 0 dB)."""
+    return tools.set_track_props(track_index, name, mute, solo, volume)
+
+
+@mcp.tool()
+def clear_track_events(track_index: int) -> dict:
+    """Delete every event on a track."""
+    return tools.clear_track_events(track_index)
+
+
+@mcp.tool()
+def clear_envelope(track_index: int, envelope_type: str = "Volume") -> dict:
+    """Remove a track envelope (Volume, CompositeLevel, ...)."""
+    return tools.clear_envelope(track_index, envelope_type)
+
+
+@mcp.tool()
+def set_event_gain(track_index: int, event_index: int, gain_db: float | None = None, gain: float | None = None,
+                   normalize: bool | None = None) -> dict:
+    """Set an audio event's gain (dB or linear) and/or normalize."""
+    return tools.set_event_gain(track_index, event_index, gain_db, gain, normalize)
+
+
+@mcp.tool()
+def list_render_templates(renderer_contains: str = "", template_contains: str = "", limit: int = 200) -> dict:
+    """List renderer + template names (use the exact names with render_start)."""
+    return tools.list_render_templates(renderer_contains, template_contains, limit)
 
 
 def main() -> None:

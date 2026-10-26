@@ -1,5 +1,6 @@
-// VegasDirectorHost.cs — VEGAS Pro 22 TCP host (no Pipes; WinForms marshal; soft ok:false errors)
-// Tools > Scripting > VegasDirectorHost — leave dialog open.
+// VegasDirectorHost.cs — VEGAS Pro 22 TCP host (Phase 3 + v2 headless extension).
+// Script Menu: Tools > Scripting > VegasDirectorHost — leave the dialog open.
+// Extension: VegasDirectorExtension.dll auto-starts the host at VEGAS launch (no dialog).
 
 using System;
 using System.Collections.Generic;
@@ -11,16 +12,76 @@ using System.Threading;
 using System.Windows.Forms;
 using ScriptPortal.Vegas;
 
-public class EntryPoint
+public partial class EntryPoint
 {
     private const int TcpPort = 8752;
     private Vegas myVegas;
     private volatile bool running = true;
     private Control uiMarshal;
+    private DateTime startedAt = DateTime.Now;
+    private int requestCount = 0;
+    private string mode = "script";
+    private string authToken = null;                       // required in extension mode
+    internal Func<RpcRequest, string> v2Dispatch = null;  // reserved for future host modules
+
+    // Called by the VegasDirector Application Extension at VEGAS startup (no dialog).
+    public void StartHeadless(Vegas vegas, Control marshal)
+    {
+        myVegas = vegas;
+        uiMarshal = marshal;
+        mode = "extension";
+        running = true;
+        authToken = LoadOrCreateToken();
+        Log("VegasDirectorHost v2 starting headless (extension) tcp=127.0.0.1:" + TcpPort + " (token required)");
+        Thread tcpThread = new Thread(RunTcpListener);
+        tcpThread.IsBackground = true;
+        tcpThread.Start();
+    }
+
+    private static string LoadOrCreateToken()
+    {
+        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "vegas-director-mcp");
+        Directory.CreateDirectory(dir);
+        string f = Path.Combine(dir, "token");
+        if (File.Exists(f))
+        {
+            string t = File.ReadAllText(f).Trim();
+            if (t.Length >= 32) return t;
+        }
+        byte[] b = new byte[32];
+        using (System.Security.Cryptography.RandomNumberGenerator rng = System.Security.Cryptography.RandomNumberGenerator.Create()) rng.GetBytes(b);
+        string tok = BitConverter.ToString(b).Replace("-", "").ToLowerInvariant();
+        File.WriteAllText(f, tok);
+        return tok;
+    }
+
+    public string StatusText()
+    {
+        return "Vegas Director MCP host v2 (" + mode + ")\r\nTCP 127.0.0.1:" + TcpPort +
+               "\r\nRunning since " + startedAt.ToString("g") + "\r\nRequests served: " + requestCount;
+    }
+
+    public string HostMode()
+    {
+        return mode;
+    }
+
+    private static bool PortInUse()
+    {
+        try { using (TcpClient c = new TcpClient()) { c.Connect("127.0.0.1", TcpPort); return true; } }
+        catch { return false; }
+    }
 
     public void FromVegas(Vegas vegas)
     {
+        if (PortInUse())
+        {
+            MessageBox.Show("The Vegas Director host is already running (the VegasDirector extension starts it with VEGAS). Nothing to do.",
+                            "vegas-director-mcp");
+            return;
+        }
         myVegas = vegas;
+        mode = "script";
 
         // Vegas has no Invoke. A visible status Form on this (UI) thread
         // marshals ScriptPortal calls and keeps the host alive.
@@ -32,7 +93,7 @@ public class EntryPoint
         status.MinimizeBox = true;
         status.ShowInTaskbar = true;
         status.StartPosition = FormStartPosition.CenterScreen;
-        status.ClientSize = new System.Drawing.Size(420, 160);
+        status.ClientSize = new System.Drawing.Size(440, 200);
         status.TopMost = false;
 
         Label lbl = new Label();
@@ -40,7 +101,7 @@ public class EntryPoint
         lbl.Dock = DockStyle.Fill;
         lbl.Padding = new Padding(14);
         lbl.Text =
-            "Host running — TCP 127.0.0.1:" + TcpPort + "\r\n\r\n" +
+            StatusText() + "\r\n\r\n" +
             "Minimize this window while you scrub Vegas.\r\n" +
             "Close it or click Stop host to disconnect MCP.";
 
@@ -128,12 +189,20 @@ public class EntryPoint
             return RpcResponse.Error(null, -32700, "Parse error: " + ex.Message);
         }
 
+        requestCount++;
+        if (authToken != null && Json.GetString(requestJson, "token") != authToken)
+            return RpcResponse.Error(req.Id, -32001, "Unauthorized: missing or wrong token");
+
         try
         {
             switch (req.Method)
             {
+                case "host.info":
+                    return RpcResponse.Result(req.Id, "{\"ok\":true,\"version\":2,\"mode\":" + Json.Str(mode) +
+                        ",\"requests\":" + requestCount + ",\"started\":" + Json.Str(startedAt.ToString("s")) +
+                        ",\"v2\":" + (v2Dispatch != null ? "true" : "false") + "}");
                 case "ping":
-                    return RpcResponse.Result(req.Id, "{\"ok\":true,\"host\":\"vegas-director\"}");
+                    return RpcResponse.Result(req.Id, "{\"ok\":true,\"host\":\"vegas-director\",\"mode\":" + Json.Str(mode) + "}");
                 case "project.get_state":
                     return InvokeOnUiThread(req, GetProjectState);
                 case "project.save":
@@ -176,7 +245,32 @@ public class EntryPoint
                     return InvokeOnUiThread(req, TransportStop);
                 case "transport.seek":
                     return InvokeOnUiThread(req, TransportSeek);
+                case "project.new":
+                    return InvokeOnUiThread(req, ProjectNew);
+                case "project.open":
+                    return InvokeOnUiThread(req, ProjectOpen);
+                case "media.list":
+                    return InvokeOnUiThread(req, ListMedia);
+                case "media.replace":
+                    return InvokeOnUiThread(req, ReplaceMedia);
+                case "media.set_alpha":
+                    return InvokeOnUiThread(req, SetMediaAlpha);
+                case "track.set_props":
+                    return InvokeOnUiThread(req, SetTrackProps);
+                case "track.clear_events":
+                    return InvokeOnUiThread(req, ClearTrackEvents);
+                case "envelope.clear":
+                    return InvokeOnUiThread(req, ClearEnvelope);
+                case "event.set_gain":
+                    return InvokeOnUiThread(req, SetEventGain);
+                case "render.list_templates":
+                    return InvokeOnUiThread(req, ListRenderTemplates);
                 default:
+                    if (v2Dispatch != null)
+                    {
+                        string r2 = v2Dispatch(req);
+                        if (r2 != null) return r2;
+                    }
                     return RpcResponse.Error(req.Id, -32601, "Method not found: " + req.Method);
             }
         }
@@ -187,6 +281,12 @@ public class EntryPoint
     }
 
     private string InvokeOnUiThread(RpcRequest req, Func<RpcRequest, string> handler)
+    {
+        int timeoutMs = Array.IndexOf(LongMethods, req.Method) >= 0 ? 1800000 : 60000;
+        return InvokeOnUiThread(req, handler, timeoutMs);
+    }
+
+    private string InvokeOnUiThread(RpcRequest req, Func<RpcRequest, string> handler, int timeoutMs)
     {
         if (uiMarshal == null || uiMarshal.IsDisposed)
             return SoftFail(req.Id, "UI marshal unavailable");
@@ -202,8 +302,8 @@ public class EntryPoint
             finally { done.Set(); }
         });
 
-        if (!done.WaitOne(60000))
-            return SoftFail(req.Id, "UI marshal timed out");
+        if (!done.WaitOne(timeoutMs))
+            return SoftFail(req.Id, "UI marshal timed out after " + timeoutMs + " ms (VEGAS may still finish the call)");
         if (thrown != null)
             return SoftFail(req.Id, thrown.Message);
         return result;
@@ -347,7 +447,8 @@ public class EntryPoint
         Project project = RequireProject();
         string type = (Json.GetString(req.ParamsJson, "type") ?? "video").ToLowerInvariant();
         string name = Json.GetString(req.ParamsJson, "name") ?? "";
-        int index = project.Tracks.Count;
+        int index = Json.GetInt(req.ParamsJson, "index", project.Tracks.Count);
+        if (index < 0 || index > project.Tracks.Count) index = project.Tracks.Count;
         if (type == "audio")
             project.Tracks.Add(new AudioTrack(project, index, name));
         else
@@ -1250,6 +1351,201 @@ public class EntryPoint
         double seconds = Json.GetDouble(req.ParamsJson, "seconds", 0);
         myVegas.Transport.CursorPosition = SecondsToTimecode(seconds);
         return RpcResponse.Result(req.Id, "{\"ok\":true,\"seconds\":" + Json.Num(seconds) + "}");
+    }
+
+    // ===== Phase 3 (2026-10-22): project lifecycle, media pool, track props, envelope clear, event gain, render templates =====
+    private static readonly string[] LongMethods = { "project.save", "project.new", "project.open", "render.start" };
+
+    private bool SaveOrDiscard(RpcRequest req, out string fail)
+    {
+        fail = null;
+        string saveTo = Json.GetString(req.ParamsJson, "save_current_to");
+        bool discard = Json.GetBool(req.ParamsJson, "discard_unsaved", false);
+        if (saveTo != null && saveTo.Length > 0)
+        {
+            if (!myVegas.SaveProject(saveTo)) { fail = "Saving the current project failed: " + saveTo; return false; }
+            return true;
+        }
+        if (!discard) { fail = "Pass save_current_to (path) to save the open project first, or discard_unsaved=true."; return false; }
+        return true;
+    }
+
+    private string ProjectNew(RpcRequest req)
+    {
+        string fail;
+        if (!SaveOrDiscard(req, out fail)) return SoftFail(req.Id, fail);
+        bool ok = myVegas.NewProject(false, false);
+        return RpcResponse.Result(req.Id, "{\"ok\":" + (ok ? "true" : "false") + "}");
+    }
+
+    private string ProjectOpen(RpcRequest req)
+    {
+        string path = Json.GetString(req.ParamsJson, "path");
+        if (path == null || !File.Exists(path)) return SoftFail(req.Id, "project file not found: " + path);
+        string fail;
+        if (!SaveOrDiscard(req, out fail)) return SoftFail(req.Id, fail);
+        myVegas.NewProject(false, false);   // closes the current one without a save prompt (already saved/discarded above)
+        bool ok = myVegas.OpenProject(path);
+        return RpcResponse.Result(req.Id, "{\"ok\":" + (ok ? "true" : "false") + ",\"path\":" + Json.Str(path) + "}");
+    }
+
+    private string ListMedia(RpcRequest req)
+    {
+        Project project = RequireProject();
+        StringBuilder sb = new StringBuilder("{\"ok\":true,\"media\":[");
+        bool first = true;
+        foreach (Media m in project.MediaPool)
+        {
+            if (!first) sb.Append(",");
+            first = false;
+            string alpha = "";
+            bool hasVideo = false, off = false;
+            try { hasVideo = m.HasVideo(); } catch { }
+            try { if (hasVideo) alpha = m.GetVideoStreamByIndex(0).AlphaChannel.ToString(); } catch { }
+            try { off = m.IsOffline(); } catch { }
+            double len = 0;
+            try { len = TimecodeToSeconds(m.Length); } catch { }
+            sb.Append("{\"path\":").Append(Json.Str(m.FilePath))
+              .Append(",\"offline\":").Append(off ? "true" : "false")
+              .Append(",\"has_video\":").Append(hasVideo ? "true" : "false")
+              .Append(",\"length_seconds\":").Append(Json.Num(len))
+              .Append(",\"alpha\":").Append(Json.Str(alpha)).Append("}");
+        }
+        sb.Append("]}");
+        return RpcResponse.Result(req.Id, sb.ToString());
+    }
+
+    private string ReplaceMedia(RpcRequest req)
+    {
+        Project project = RequireProject();
+        string oldPath = Json.GetString(req.ParamsJson, "old_path");
+        string newPath = Json.GetString(req.ParamsJson, "new_path");
+        if (oldPath == null || oldPath.Length == 0) return SoftFail(req.Id, "params.old_path required");
+        if (newPath == null || !File.Exists(newPath)) return SoftFail(req.Id, "new_path not found: " + newPath);
+        Media oldM = FindMediaByPath(project, oldPath);
+        if (oldM == null) return SoftFail(req.Id, "old_path is not in the media pool: " + oldPath);
+        Media newM = EnsureMedia(project, newPath);
+        oldM.ReplaceWith(newM);
+        return RpcResponse.Result(req.Id, "{\"ok\":true,\"old_path\":" + Json.Str(oldPath) + ",\"new_path\":" + Json.Str(newPath) + "}");
+    }
+
+    private string SetMediaAlpha(RpcRequest req)
+    {
+        Project project = RequireProject();
+        string path = Json.GetString(req.ParamsJson, "path") ?? "";
+        string contains = Json.GetString(req.ParamsJson, "path_contains") ?? "";
+        string mode = Json.GetString(req.ParamsJson, "alpha") ?? "Straight";
+        if (path.Length == 0 && contains.Length == 0) return SoftFail(req.Id, "pass path or path_contains");
+        VideoAlphaType a;
+        try { a = (VideoAlphaType)Enum.Parse(typeof(VideoAlphaType), mode, true); }
+        catch { return SoftFail(req.Id, "alpha must be one of: " + string.Join(", ", Enum.GetNames(typeof(VideoAlphaType)))); }
+        int n = 0;
+        foreach (Media m in project.MediaPool)
+        {
+            string fp = m.FilePath ?? "";
+            bool match = (path.Length > 0 && string.Equals(fp, path, StringComparison.OrdinalIgnoreCase)) ||
+                         (contains.Length > 0 && fp.IndexOf(contains, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (!match) continue;
+            try { if (m.HasVideo()) { m.GetVideoStreamByIndex(0).AlphaChannel = a; n++; } } catch { }
+        }
+        return RpcResponse.Result(req.Id, "{\"ok\":true,\"alpha\":" + Json.Str(a.ToString()) + ",\"media_updated\":" + n + "}");
+    }
+
+    private string SetTrackProps(RpcRequest req)
+    {
+        Project project = RequireProject();
+        int ti = Json.GetInt(req.ParamsJson, "track_index", -1);
+        if (ti < 0 || ti >= project.Tracks.Count) return SoftFail(req.Id, "Invalid track_index");
+        Track t = project.Tracks[ti];
+        string name = Json.GetString(req.ParamsJson, "name");
+        if (name != null) t.Name = name;
+        if (Json.GetRaw(req.ParamsJson, "mute") != null) t.Mute = Json.GetBool(req.ParamsJson, "mute", t.Mute);
+        if (Json.GetRaw(req.ParamsJson, "solo") != null) t.Solo = Json.GetBool(req.ParamsJson, "solo", t.Solo);
+        double vol = Json.GetDouble(req.ParamsJson, "volume", double.NaN);
+        if (!double.IsNaN(vol))
+        {
+            AudioTrack at = t as AudioTrack;
+            if (at == null) return SoftFail(req.Id, "volume needs an audio track");
+            at.Volume = (float)vol;
+        }
+        return RpcResponse.Result(req.Id, "{\"ok\":true,\"track_index\":" + ti + ",\"name\":" + Json.Str(t.Name) + "}");
+    }
+
+    private string ClearTrackEvents(RpcRequest req)
+    {
+        Project project = RequireProject();
+        int ti = Json.GetInt(req.ParamsJson, "track_index", -1);
+        if (ti < 0 || ti >= project.Tracks.Count) return SoftFail(req.Id, "Invalid track_index");
+        Track t = project.Tracks[ti];
+        int n = t.Events.Count;
+        for (int i = n - 1; i >= 0; i--) t.Events.Remove(t.Events[i]);
+        return RpcResponse.Result(req.Id, "{\"ok\":true,\"track_index\":" + ti + ",\"removed\":" + n + "}");
+    }
+
+    private string ClearEnvelope(RpcRequest req)
+    {
+        Project project = RequireProject();
+        int ti = Json.GetInt(req.ParamsJson, "track_index", -1);
+        if (ti < 0 || ti >= project.Tracks.Count) return SoftFail(req.Id, "Invalid track_index");
+        EnvelopeType? et = ParseEnvelopeType(Json.GetString(req.ParamsJson, "envelope_type") ?? "Volume");
+        if (et == null) return SoftFail(req.Id, "Unknown envelope_type");
+        Track track = project.Tracks[ti];
+        Envelope env = null;
+        try { env = track.Envelopes.FindByType(et.Value); } catch { }
+        if (env == null) return RpcResponse.Result(req.Id, "{\"ok\":true,\"removed\":false}");
+        track.Envelopes.Remove(env);
+        return RpcResponse.Result(req.Id, "{\"ok\":true,\"removed\":true}");
+    }
+
+    private string SetEventGain(RpcRequest req)
+    {
+        Project project = RequireProject();
+        TrackEvent ev;
+        try { ev = GetEvent(project, Json.GetInt(req.ParamsJson, "track_index", -1), Json.GetInt(req.ParamsJson, "event_index", -1)); }
+        catch (Exception ex) { return SoftFail(req.Id, ex.Message); }
+        AudioEvent ae = ev as AudioEvent;
+        if (ae == null) return SoftFail(req.Id, "event.set_gain requires an AudioEvent");
+        double gain = Json.GetDouble(req.ParamsJson, "gain", double.NaN);
+        double db = Json.GetDouble(req.ParamsJson, "gain_db", double.NaN);
+        if (!double.IsNaN(db)) gain = Math.Pow(10.0, db / 20.0);
+        if (!double.IsNaN(gain)) ae.FadeIn.Gain = (float)gain;
+        if (Json.GetRaw(req.ParamsJson, "normalize") != null) ae.Normalize = Json.GetBool(req.ParamsJson, "normalize", false);
+        return RpcResponse.Result(req.Id, "{\"ok\":true,\"gain\":" + Json.Num(ae.FadeIn.Gain) + ",\"normalize\":" + (ae.Normalize ? "true" : "false") + "}");
+    }
+
+    private string ListRenderTemplates(RpcRequest req)
+    {
+        string rf = Json.GetString(req.ParamsJson, "renderer_contains") ?? "";
+        string tf = Json.GetString(req.ParamsJson, "template_contains") ?? "";
+        int limit = Json.GetInt(req.ParamsJson, "limit", 200);
+        StringBuilder sb = new StringBuilder("{\"ok\":true,\"templates\":[");
+        int n = 0;
+        foreach (Renderer r in myVegas.Renderers)
+        {
+            string ft = "", rn = "";
+            try { ft = r.FileTypeName ?? ""; } catch { }
+            try { rn = r.Name ?? ""; } catch { }
+            if (rf.Length > 0 && ft.IndexOf(rf, StringComparison.OrdinalIgnoreCase) < 0 && rn.IndexOf(rf, StringComparison.OrdinalIgnoreCase) < 0) continue;
+            try
+            {
+                foreach (RenderTemplate t in r.Templates)
+                {
+                    if (n >= limit) break;
+                    string tn = t.Name ?? "";
+                    if (tf.Length > 0 && tn.IndexOf(tf, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (n > 0) sb.Append(",");
+                    sb.Append("{\"renderer\":").Append(Json.Str(ft)).Append(",\"renderer_name\":").Append(Json.Str(rn))
+                      .Append(",\"template\":").Append(Json.Str(tn));
+                    try { sb.Append(",\"width\":").Append(t.VideoWidth).Append(",\"height\":").Append(t.VideoHeight)
+                            .Append(",\"fps\":").Append(Json.Num(t.VideoFrameRate)).Append(",\"video_bitrate\":").Append(t.VideoBitrate); } catch { }
+                    sb.Append("}");
+                    n++;
+                }
+            }
+            catch { }
+        }
+        sb.Append("],\"count\":").Append(n).Append("}");
+        return RpcResponse.Result(req.Id, sb.ToString());
     }
 
     private void Log(string msg)
