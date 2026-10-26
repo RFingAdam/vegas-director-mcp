@@ -21,46 +21,53 @@
 - `envelope.set_points` — Volume / CompositeLevel create-or-update points.
 - `project.get_selected_events` — selected track/event indices.
 - `render.start` — best-effort RenderArgs or SoftFail → File > Render As.
-- Use case: cut a ~2 min Raid Hours promo (9.9/10) with zooms, fades, clarifying
-  text (native titles and/or PNG overlays).
 
-## Phase 3a — Host-side project / media / track tools (complete on disk)
-Oct 2026 local work, now the GitHub source of truth:
-
+## Phase 3a — Host-side project / media / track tools (complete)
 - `project.new` / `project.open` with save-or-discard.
 - `media.list` / `media.replace` / `media.set_alpha`.
 - `track.set_props` / `track.clear_events` / `track.add` insert `index`.
 - `envelope.clear`, `event.set_gain`, `render.list_templates`.
-- v2 host: `StartHeadless` + `ICustomCommandModule` Application Extension so
-  the TCP listener starts with VEGAS; runtime token under
-  `%LOCALAPPDATA%\vegas-director-mcp\token` (generated, never committed).
+- v2 host: `StartHeadless` + Application Extension auto-start + runtime token.
 
-Still needed from Adam: run `host\build.ps1` (or re-copy the Script Menu
-`.cs`) and restart VEGAS so the live editor matches disk.
+## Phase 3b — Media grounding + edit helpers (complete)
+Pure Python + ffmpeg (no VEGAS):
 
-## Phase 3b — Media grounding + higher-level edit helpers (not done)
-- `probe_media` (ffprobe) and `detect_scenes` (ffmpeg) for real in/out candidates.
-- Audio loudness / peak detection (reaction spikes, kill/cash, squad shout).
-- Optional local Whisper (`faster-whisper`, GPU if present).
-- Caption generation (SRT/ASS + burned-in vertical Short style).
-- `find_highlights` ranking 20–35 s Short candidates.
-- Crossfade / music-voice ducking helpers on envelope + fades primitives.
-- Vertical Short template (16:9 → 9:16 crop/pan, punch-in, captions, loop end).
-- `propose_edit` composite tool iterating place → inspect → revise.
+- `probe_media` (ffprobe)
+- `detect_scenes` (ffmpeg scene score)
+- `analyze_audio` — windowed RMS/peak, classifies reaction / kill_cash / squad_shout
+- `transcribe_media` — optional `faster-whisper`; CUDA if ctranslate2 sees a GPU, else CPU int8; soft-fail if the extra is missing
+- `generate_captions` / `burn_captions` — SRT + 1080×1920 ASS (Arial Black, thick outline) and ffmpeg burn-in
+- `find_highlights` — ranks 20–35 s windows with in/out + reasons
 
-## Phase 4 — Render & delivery (not done)
-- Named render presets (vertical 1080×1920 / 1080p / 4K).
-- Async status polling via `Vegas.BeginRender` + `RenderProgress` /
-  `RenderFinished` so a long encode does not sit on the UI-marshal wait.
-- Verify the output file (duration / resolution / audio) with ffprobe.
-- Edit-metadata sidecar JSON next to every render (length, hook start,
-  caption style, zoom count, music on/off, template) for a weekly
-  retention loop.
+Host-backed helpers:
+
+- `apply_crossfade`, `apply_ducking`
+- `apply_vertical_short` — 16:9→9:16 crop/pan, punch-in, captions track, loop-friendly fade
+- `propose_edit` — find/accept a window, place, inspect, revise
+- `project.set_video` — 1080×1920 etc.
+
+## Phase 4 — Render & delivery (complete)
+- Named presets: `vertical` (1080×1920), `1080p`, `4k` via `render_with_preset`
+- `render.start(async=true)` uses documented `Vegas.BeginRender` + `RenderProgress` / `RenderFinished`
+- `render_status` / `wait_for_render` poll from Python (never sit on the UI-marshal wait)
+- `verify_output` (ffprobe: duration, resolution, audio)
+- Sidecar `<output>.edit.json`: length, hook start, caption style, zoom count, music, template
+
+## Dual-mode host (complete, documented against Pro 22 help)
+VEGAS Pro 22 does **not** ship a GUI-less render farm. Official switches are
+`/NOLOGO`, `/OPEN`, `/RUNSCRIPT` (`/SCRIPT`), `/SCRIPTARGS`, `/CMDMODULE`.
+Application Extensions load at startup from
+`Documents\Vegas Application Extensions`.
+
+Same MCP tools pick a mode and set `used_mode`:
+
+- `live` — TCP already up
+- `launched_extension` / `launched_runscript` — `ensure_host` starts VEGAS
+- `oneshot_runscript` — generated `.cs` + sibling `.job.json`
+
+See [skills/vegas-director/SKILL.md](../skills/vegas-director/SKILL.md).
 
 ## Non-goals (for now)
 - Full VEGAS UI parity — editing/automation surface, not remote desktop.
 - Multi-user/remote collaboration — single local VEGAS instance only.
-- True GUI-less VEGAS. Pro 22 has `/RUNSCRIPT`, `/SCRIPTARGS`, and
-  `/CMDMODULE`, but no documented headless/no-UI mode. "No-host" means
-  auto-start the in-process host (extension) or generate a one-shot
-  script, not a separate render farm.
+- True GUI-less VEGAS.

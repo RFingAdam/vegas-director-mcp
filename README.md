@@ -52,10 +52,20 @@ read the timeline back and revise.
 
 The host binds **TCP `127.0.0.1:8752` only**.
 
-**Not in this tree yet** (see [docs/ROADMAP.md](docs/ROADMAP.md)): ffprobe /
-scene / loudness / Whisper media grounding, caption generation,
-`find_highlights`, crossfade / duck helpers, the vertical Short template,
-`propose_edit`, async render polling, and the edit-metadata sidecar.
+**Phase 3/4 (default editing path):**
+
+- `probe_media`, `detect_scenes`, `analyze_audio`, optional `transcribe_media`
+  (`faster-whisper`, GPU if present) — no VEGAS required
+- `generate_captions` / `burn_captions` (SRT + 9:16 ASS)
+- `find_highlights` ranks 20–35 s Short candidates
+- `apply_crossfade`, `apply_ducking`, `apply_vertical_short`, `propose_edit`
+- Named render presets (`vertical` / `1080p` / `4k`), async
+  `Vegas.BeginRender` + `render_status`, ffprobe verify, `<output>.edit.json`
+  sidecar
+- Same tools auto-pick live TCP vs launching VEGAS (`/RUNSCRIPT` or the
+  Application Extension) and report `used_mode`
+
+Skill: [skills/vegas-director/SKILL.md](skills/vegas-director/SKILL.md).
 
 ## Architecture
 
@@ -87,7 +97,8 @@ See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the wire format and
   Extension DLL (`host/build.ps1`). Script Menu mode does not need a compile
   — VEGAS compiles the `.cs` when you run it.
 
-`ffmpeg` / `ffprobe` are **not** required for the host tools in this tree.
+`ffmpeg` / `ffprobe` are required for media grounding, caption burn-in, and
+render verification. Optional: `pip install 'vegas-director-mcp[whisper]'`.
 
 ## Quick start
 
@@ -104,6 +115,8 @@ test, Claude Desktop registration.
 | `host/reflect_api.ps1` | Optional ScriptPortal.Vegas reflection helper |
 | `server/vegas_director_mcp/` | FastMCP server + JSON-RPC client |
 | `scripts/register_claude.py` | Write Claude Desktop MCP config from this checkout |
+| `skills/vegas-director/SKILL.md` | Default Short / long-form workflow |
+| `server/tests/` | Mocked host + synthetic ffmpeg fixtures |
 | `docs/` | Protocol, API coverage, setup, roadmap |
 
 ## License
