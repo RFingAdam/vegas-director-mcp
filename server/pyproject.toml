@@ -1,7 +1,7 @@
 [project]
 name = "vegas-director-mcp"
 version = "0.1.0"
-description = "MCP server for driving MAGIX VEGAS Pro via its scripting API."
+description = "MCP server for AI-directed editing in VEGAS Pro, DaVinci Resolve Studio, or OTIO/FCPXML/MLT export."
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [

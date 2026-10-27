@@ -57,3 +57,11 @@ Use **live / extension** for an interactive cut (place → inspect → revise). 
 - Extension mode needs `%LOCALAPPDATA%\vegas-director-mcp\token` (auto-sent). Do not commit it.
 - `replace_media` is how you swap an OBS `.mkv` for a remuxed `.mp4`.
 - If render templates do not match, `list_render_templates` and pass exact names to `render_start`.
+
+## Other editors
+
+`DIRECTOR_EDITOR=resolve` talks to **DaVinci Resolve Studio 21.1+**
+(Preferences → External scripting = Local). Free Resolve has no Scripting
+API since 21.1 — if `ping` returns `studio_required`, switch to
+`DIRECTOR_EDITOR=otio` and `save_project` a `.otio` / `.fcpxml` for import.
+See [docs/RESOLVE.md](../../docs/RESOLVE.md) and [docs/EDITORS.md](../../docs/EDITORS.md).

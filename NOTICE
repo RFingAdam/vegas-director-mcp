@@ -10,3 +10,11 @@ company. VEGAS, VEGAS Pro, and MAGIX are trademarks of their respective owners.
 This repository does not redistribute MAGIX binaries, installers, or the
 VEGAS scripting assemblies. The host script calls ScriptPortal.Vegas only
 inside a locally licensed VEGAS Pro install.
+
+The optional DaVinci Resolve backend uses Blackmagic's official scripting
+module (`DaVinciResolveScript` / fusionscript) inside a locally installed
+Resolve. It is not affiliated with, endorsed by, or supported by
+Blackmagic Design. DaVinci Resolve and Fusion are trademarks of
+Blackmagic Design Pty Ltd. This repository does not redistribute Resolve
+binaries. Live scripting requires Resolve Studio; the free edition has
+had no Scripting API since version 21.1.

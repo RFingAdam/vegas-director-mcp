@@ -2,7 +2,8 @@
 
 Run with: python -m vegas_director_mcp
 
-Default transport is TCP 127.0.0.1:8752 (set VEGAS_HOST_TRANSPORT=pipe for named pipe).
+Default editor is MAGIX VEGAS Pro (TCP 127.0.0.1:8752). Set DIRECTOR_EDITOR
+to `resolve` (DaVinci Resolve Studio 21.1+) or `otio` (OTIO/FCPXML/MLT export).
 """
 from __future__ import annotations
 
@@ -492,6 +493,60 @@ def write_edit_sidecar(output_path: str, edit_meta: dict[str, Any] | None = None
     from .render.sidecar import write_sidecar
 
     return write_sidecar(output_path, edit_meta)
+
+
+@mcp.tool()
+def list_editors() -> dict:
+    """List backends (vegas, resolve, otio) and the current DIRECTOR_EDITOR."""
+    return tools.list_editors()
+
+
+@mcp.tool()
+def editor_info() -> dict:
+    """Current editor, product, and whether Studio scripting is available."""
+    return tools.editor_info()
+
+
+@mcp.tool()
+def editor_capabilities() -> dict:
+    """What the current backend implements 1:1 vs partial vs unsupported."""
+    return tools.editor_capabilities()
+
+
+@mcp.tool()
+def add_marker(at_seconds: float, name: str = "marker", note: str = "", color: str = "Green") -> dict:
+    """Add a timeline marker. Resolve + OTIO implement this; VEGAS soft-fails until the host grows the RPC."""
+    return tools.add_marker(at_seconds, name, note, color)
+
+
+@mcp.tool()
+def list_markers() -> dict:
+    """List timeline markers on the current backend."""
+    return tools.list_markers()
+
+
+@mcp.tool()
+def delete_marker(at_seconds: float | None = None, color: str | None = None, name: str | None = None) -> dict:
+    """Delete a marker by time, color, or name."""
+    return tools.delete_marker(at_seconds=at_seconds, color=color, name=name)
+
+
+@mcp.tool()
+def resolve_create_subtitles() -> dict:
+    """Studio-only: CreateSubtitlesFromAudio on the current Resolve timeline."""
+    return tools.resolve_create_subtitles()
+
+
+@mcp.tool()
+def resolve_smart_reframe(track_index: int, event_index: int) -> dict:
+    """Studio-only: SmartReframe on a Resolve clip."""
+    return tools.resolve_smart_reframe(track_index, event_index)
+
+
+@mcp.tool()
+def resolve_set_voice_isolation(track_index: int, event_index: int, enabled: bool = True) -> dict:
+    """Studio-only: SetVoiceIsolationState on a Resolve clip."""
+    return tools.resolve_set_voice_isolation(track_index, event_index, enabled)
 
 
 def main() -> None:

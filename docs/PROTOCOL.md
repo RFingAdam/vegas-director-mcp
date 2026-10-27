@@ -129,3 +129,13 @@ Positions and durations on the wire are **seconds** (`start_seconds`,
 | `-32601` | Unknown method (JSON-RPC error) |
 | `-32001` | Extension mode: missing or wrong token (JSON-RPC error) |
 | *(none)* | VEGAS/validation failures: result `{ok: false, error}` |
+
+## Multi-editor
+
+`DIRECTOR_EDITOR=vegas|resolve|otio` picks a backend. VEGAS still uses
+this TCP protocol unchanged. Resolve and OTIO implement the same method
+names in-process (no TCP). Resolve refusals for free / no-scripting use
+result `{ok: false, studio_required: true, reason: ...}` rather than a
+JSON-RPC error code. Extra methods: `marker.*`, `editor.capabilities`,
+`resolve.create_subtitles`, `resolve.smart_reframe`,
+`resolve.set_voice_isolation`.

@@ -9,7 +9,9 @@ from .session import get_session
 
 
 def _call(method: str, params: dict[str, Any] | None = None) -> dict:
-    return get_session().call(method, params)
+    from .backends import get_backend
+
+    return get_backend().call(method, params)
 
 
 def ping() -> dict:
@@ -316,8 +318,10 @@ def set_project_video(
 
 
 def ensure_host(project_path: str | None = None) -> dict:
-    """Connect to the live host, or launch VEGAS so the extension / script starts it."""
-    return get_session().ensure(project_path=project_path)
+    """Reach the current editor (VEGAS host, Resolve Studio, or the OTIO memory store)."""
+    from .backends import get_backend
+
+    return get_backend().ensure(project_path)
 
 
 def run_oneshot(job: dict[str, Any]) -> dict:
@@ -460,3 +464,78 @@ def set_event_gain(track_index: int, event_index: int, gain_db: float | None = N
 def list_render_templates(renderer_contains: str = "", template_contains: str = "", limit: int = 200) -> dict:
     """Exact renderer/template names for render_start."""
     return _call("render.list_templates", {"renderer_contains": renderer_contains, "template_contains": template_contains, "limit": limit})
+
+
+def list_editors() -> dict:
+    from .backends import list_editors as _list
+
+    return _list()
+
+
+def editor_info() -> dict:
+    from .backends import get_backend
+
+    backend = get_backend()
+    info = getattr(backend, "info", None)
+    if callable(info):
+        return info()
+    return _call("editor.info")
+
+
+def editor_capabilities() -> dict:
+    from .backends import get_backend
+
+    return get_backend().capabilities()
+
+
+def add_marker(
+    at_seconds: float,
+    name: str = "marker",
+    note: str = "",
+    color: str = "Green",
+    custom_data: str | None = None,
+) -> dict:
+    params: dict[str, Any] = {"at_seconds": at_seconds, "name": name, "note": note, "color": color}
+    if custom_data:
+        params["custom_data"] = custom_data
+    return _call("marker.add", params)
+
+
+def list_markers() -> dict:
+    return _call("marker.list")
+
+
+def delete_marker(
+    at_seconds: float | None = None,
+    color: str | None = None,
+    custom_data: str | None = None,
+    name: str | None = None,
+) -> dict:
+    params: dict[str, Any] = {}
+    if at_seconds is not None:
+        params["at_seconds"] = at_seconds
+    if color is not None:
+        params["color"] = color
+    if custom_data is not None:
+        params["custom_data"] = custom_data
+    if name is not None:
+        params["name"] = name
+    return _call("marker.delete", params)
+
+
+def resolve_create_subtitles() -> dict:
+    """Studio-only: Timeline.CreateSubtitlesFromAudio()."""
+    return _call("resolve.create_subtitles")
+
+
+def resolve_smart_reframe(track_index: int, event_index: int) -> dict:
+    """Studio-only: TimelineItem.SmartReframe()."""
+    return _call("resolve.smart_reframe", {"track_index": track_index, "event_index": event_index})
+
+
+def resolve_set_voice_isolation(track_index: int, event_index: int, enabled: bool = True) -> dict:
+    """Studio-only: SetVoiceIsolationState on the clip / media-pool item."""
+    return _call(
+        "resolve.set_voice_isolation",
+        {"track_index": track_index, "event_index": event_index, "enabled": enabled},
+    )

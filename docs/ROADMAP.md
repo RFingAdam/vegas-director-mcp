@@ -71,3 +71,11 @@ See [skills/vegas-director/SKILL.md](../skills/vegas-director/SKILL.md).
 - Full VEGAS UI parity — editing/automation surface, not remote desktop.
 - Multi-user/remote collaboration — single local VEGAS instance only.
 - True GUI-less VEGAS.
+
+## Multi-editor adapter (started)
+
+- Backend protocol under `server/vegas_director_mcp/backends/`.
+- VEGAS default unchanged.
+- Resolve Studio 21.1+ live backend (free edition has no API).
+- OTIO / FCPXML / MLT export for free-editor adoption.
+- Next live candidate: Premiere Pro UXP — [docs/EDITORS.md](EDITORS.md).
