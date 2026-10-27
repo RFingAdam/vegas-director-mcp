@@ -201,6 +201,134 @@ def test_match_preset_picks_vertical():
     assert matched["template_name"] == "Vertical 1080x1920"
 
 
+def test_match_preset_finds_vertical_after_400_avi_templates():
+    """Adam's install: 503 templates; MAGIX AVC/AAC MP4 sits after the old 400 cap."""
+    templates = [
+        {"renderer": "Video for Windows", "template": f"avi-{i}", "width": 1920, "height": 1080}
+        for i in range(450)
+    ]
+    templates.append(
+        {
+            "renderer": "MAGIX AVC/AAC MP4",
+            "renderer_name": "MAGIX AVC/AAC MP4",
+            "template": "Internet HD 1080p 9:16",
+            "width": 1080,
+            "height": 1920,
+        }
+    )
+    matched = match_preset("vertical", templates)
+    assert matched["ok"] is True
+    assert matched["template_name"] == "Internet HD 1080p 9:16"
+    assert matched["listed_count"] == 451
+
+
+def test_match_preset_avc_alias_without_mp4_in_renderer_name():
+    templates = [
+        {
+            "renderer": "MAGIX AVC/AAC",
+            "renderer_name": "MAGIX AVC/AAC",
+            "template": "Portrait 1080x1920",
+            "width": 1080,
+            "height": 1920,
+        }
+    ]
+    matched = match_preset("vertical", templates)
+    assert matched["ok"] is True
+    assert matched["template_name"] == "Portrait 1080x1920"
+
+
+def test_render_with_preset_paginates_past_400(fake_session, color_clip, tmp_path):
+    out = tmp_path / "out.mp4"
+    out.write_bytes(color_clip.read_bytes())
+    all_templates = [
+        {"renderer": "Video for Windows", "template": f"avi-{i}", "width": 1920, "height": 1080}
+        for i in range(450)
+    ]
+    vertical = {
+        "renderer": "MAGIX AVC/AAC MP4",
+        "renderer_name": "MAGIX AVC/AAC MP4",
+        "template": "Vertical 1080x1920",
+        "width": 1080,
+        "height": 1920,
+    }
+    all_templates.append(vertical)
+    calls = []
+
+    def handler(method, params):
+        if method == "render.list_templates":
+            calls.append(dict(params))
+            rf = (params.get("renderer_contains") or "").lower()
+            items = all_templates
+            if rf:
+                items = [
+                    t
+                    for t in items
+                    if rf in (t.get("renderer") or "").lower()
+                    or rf in (t.get("renderer_name") or "").lower()
+                    or rf in (t.get("template") or "").lower()
+                ]
+            limit = int(params.get("limit") or 0)
+            offset = int(params.get("offset") or 0)
+            if limit <= 0:
+                page = items[offset:]
+                truncated = False
+            else:
+                page = items[offset : offset + limit]
+                truncated = offset + limit < len(items)
+            # Old 400 cap would have dropped MAGIX AVC if we listed unfiltered.
+            assert not (limit == 400 and not rf)
+            return {
+                "ok": True,
+                "templates": page,
+                "count": len(page),
+                "truncated": truncated,
+                "offset": offset,
+                "limit": limit,
+            }
+        if method == "render.start":
+            assert params["template_name"] == "Vertical 1080x1920"
+            return {"ok": True, "job_id": "v9", "state": "running", "async": True}
+        if method == "render.status":
+            return {"ok": True, "job_id": "v9", "state": "complete", "percent": 100}
+        raise AssertionError(method)
+
+    fake_session(handler)
+    result = tools.render_with_preset(str(out), "vertical", wait=True)
+    assert result["started"]["job_id"] == "v9"
+    assert result["preset"]["template_name"] == "Vertical 1080x1920"
+    assert any(int(c.get("limit") or 0) != 400 for c in calls)
+
+
+def test_render_with_preset_retries_old_host_limit_zero(fake_session, color_clip, tmp_path):
+    """Pre-fix host: ``if (n >= limit)`` with limit=0 returned an empty list."""
+    out = tmp_path / "out.mp4"
+    out.write_bytes(color_clip.read_bytes())
+    vertical = {
+        "renderer": "MAGIX AVC/AAC MP4",
+        "renderer_name": "MAGIX AVC/AAC MP4",
+        "template": "Vertical 1080x1920",
+        "width": 1080,
+        "height": 1920,
+    }
+
+    def handler(method, params):
+        if method == "render.list_templates":
+            limit = int(params.get("limit") if params.get("limit") is not None else 200)
+            if limit == 0:
+                return {"ok": True, "templates": [], "count": 0}
+            return {"ok": True, "templates": [vertical], "count": 1}
+        if method == "render.start":
+            return {"ok": True, "job_id": "old", "state": "running", "async": True}
+        if method == "render.status":
+            return {"ok": True, "job_id": "old", "state": "complete", "percent": 100}
+        raise AssertionError(method)
+
+    fake_session(handler)
+    result = tools.render_with_preset(str(out), "vertical", wait=True)
+    assert result["preset"]["template_name"] == "Vertical 1080x1920"
+    assert result["started"]["job_id"] == "old"
+
+
 def test_sidecar_schema(tmp_path, color_clip):
     dest = tmp_path / "short.mp4"
     dest.write_bytes(color_clip.read_bytes())

@@ -90,7 +90,7 @@ Almost every VEGAS-side failure is a JSON-RPC **result** with
 | `transport.play` | — | |
 | `transport.stop` | — | |
 | `transport.seek` | `seconds` | cursor position |
-| `render.list_templates` | `renderer_contains?`, `template_contains?`, `limit?` | |
+| `render.list_templates` | `renderer_contains?`, `template_contains?`, `limit?`, `offset?` | `limit=0` (host default) = unlimited; `truncated` when a positive limit was hit |
 | `render.start` | `output_path`, `template_name?`, `renderer_name?`, `start_seconds?`, `length_seconds?`, `async?` | default `async=true` → `BeginRender` + `job_id` |
 | `render.status` | `job_id?` | `{state, percent, output_path}` |
 | `project.set_video` | `width?`, `height?`, `frame_rate?` | |
@@ -109,10 +109,18 @@ RPCs above.
 ## Threading
 
 `ScriptPortal.Vegas` is not thread-safe. The TCP listener runs on a
-background thread. Each mutating call is marshaled to the UI thread
+background thread. Each VEGAS call is marshaled to the UI thread
 with a WinForms control (`Control.BeginInvoke`). Ordinary calls wait
 60s; `project.save` / `project.new` / `project.open` / `render.start`
 wait 30 minutes. Callers do not marshal.
+
+VEGAS wraps a Script Menu run in an `UndoBlock` automatically.
+Application Extensions do **not**. Project mutations from extension
+mode (`track.add`, `project.new`, `project.set_video`, event/media
+edits, …) are therefore wrapped in `new UndoBlock("Vegas Director: …")`
+on that UI thread. Without it, VEGAS raises COM `E_UNEXPECTED`
+(`0x8000FFFF`) even though reads succeed. Nested undo blocks are valid
+in script mode. Render / transport / save / list calls are not wrapped.
 
 ## Timecodes
 

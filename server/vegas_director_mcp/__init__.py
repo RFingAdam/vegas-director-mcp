@@ -273,9 +273,18 @@ def set_event_gain(track_index: int, event_index: int, gain_db: float | None = N
 
 
 @mcp.tool()
-def list_render_templates(renderer_contains: str = "", template_contains: str = "", limit: int = 200) -> dict:
-    """List renderer + template names (use the exact names with render_start)."""
-    return tools.list_render_templates(renderer_contains, template_contains, limit)
+def list_render_templates(
+    renderer_contains: str = "",
+    template_contains: str = "",
+    limit: int = 200,
+    offset: int = 0,
+) -> dict:
+    """List renderer + template names (use the exact names with render_start).
+
+    ``limit=0`` returns the full list. ``offset`` pages. Default 200 is a
+    browse cap; ``render_with_preset`` walks the whole set.
+    """
+    return tools.list_render_templates(renderer_contains, template_contains, limit, offset)
 
 
 @mcp.tool()

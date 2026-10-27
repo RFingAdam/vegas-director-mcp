@@ -20,6 +20,15 @@ siblings) at startup and keeps them loaded for the process lifetime.
 That is documented under *Using Scripting → VEGAS Pro extensions* and the
 Application Extensions FAQ.
 
+**Documents is the Windows Known Folder**, not always
+`%USERPROFILE%\Documents`. If Documents is redirected to OneDrive (common
+on Windows 11), VEGAS reads e.g.
+`C:\Users\<you>\OneDrive\Documents\Vegas Application Extensions`.
+`host\build.ps1` uses `[Environment]::GetFolderPath('MyDocuments')` and
+the Python launcher uses `SHGetFolderPathW` so the DLL lands where VEGAS
+looks. Do not copy to `%USERPROFILE%\Documents\...` unless that is the
+same folder.
+
 1. Close VEGAS if it is open (the DLL is locked while loaded).
 2. From the repo root:
 
@@ -30,9 +39,10 @@ Application Extensions FAQ.
    `build.ps1` compiles `VegasDirectorHost.cs` + `VegasDirectorExtension.cs`
    against `C:\Program Files\VEGAS\VEGAS Pro 22.0\ScriptPortal.Vegas.dll`
    and copies `VegasDirector.dll` to
-   `%USERPROFILE%\Documents\Vegas Application Extensions\`. It also copies
-   the `.cs` host into `%USERPROFILE%\Documents\Vegas Script Menu\` as a
-   manual fallback.
+   `<MyDocuments>\Vegas Application Extensions\` (Known Folder, follows
+   OneDrive). It also copies the `.cs` host into
+   `<MyDocuments>\Vegas Script Menu\` as a manual fallback. The script
+   prints the resolved Documents path.
 3. Start **VEGAS Pro 22**. The host should already be listening — no
    *Tools > Scripting* step.
 4. Optional status pane: *View > Extensions > Vegas Director Host*.
@@ -49,7 +59,9 @@ No Visual Studio project. VEGAS compiles `VegasDirectorHost.cs` when you
 run it from the Scripting menu.
 
 1. Copy `host/VegasDirectorHost.cs` into a Script Menu folder:
-   - `%USERPROFILE%\Documents\Vegas Script Menu\` (preferred), or
+   - `<MyDocuments>\Vegas Script Menu\` (preferred; same Known Folder as
+     above — OneDrive-redirected Documents if that is how this PC is set
+     up), or
    - `C:\Program Files\VEGAS\VEGAS Pro 22.0\Script Menu\` (often needs
      admin), or
    - A user-writable folder listed under
@@ -177,7 +189,17 @@ Default Short / long-form workflow: [skills/vegas-director/SKILL.md](../skills/v
 
 ## 4. If the host is already running an old copy
 
-**Extension:** close VEGAS, re-run `host\build.ps1`, start VEGAS again.
+**Extension:** close VEGAS. If you renamed `VegasDirector.dll` to
+`VegasDirector.dll.disabled` while testing Script Menu mode, rename it
+back to `.dll`. Re-run `host\build.ps1` (confirm the printed Documents
+path is the OneDrive folder if this PC redirects Documents). Start VEGAS
+again.
+
+Extension-mode **writes** (new project, add track, set video, apply a
+Short) need this rebuilt DLL: VEGAS does not wrap Application Extension
+edits in an undo transaction the way it wraps *Tools > Scripting*, so
+the host now creates an `UndoBlock` on the UI thread. Reads already
+worked; old DLLs still fail writes with `E_UNEXPECTED`.
 
 **Script Menu:**
 

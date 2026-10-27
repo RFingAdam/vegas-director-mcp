@@ -308,7 +308,7 @@ public partial class EntryPoint
 
         uiMarshal.BeginInvoke((MethodInvoker)delegate
         {
-            try { result = handler(req); }
+            try { result = RunOnUiThread(req, handler); }
             catch (Exception ex) { thrown = ex; }
             finally { done.Set(); }
         });
@@ -318,6 +318,54 @@ public partial class EntryPoint
         if (thrown != null)
             return SoftFail(req.Id, thrown.Message);
         return result;
+    }
+
+    // Script Menu runs are wrapped in an UndoBlock by VEGAS automatically
+    // (the whole FromVegas call). Application Extensions are not — MAGIX
+    // documents that custom-command / extension mutations must create one
+    // themselves. Without it, Project.Tracks.Add / Video.Width / NewProject
+    // raise COM E_UNEXPECTED (0x8000FFFF) even when already on the UI thread.
+    // Nested UndoBlocks are valid in script mode.
+    private static bool MethodNeedsUndoBlock(string method)
+    {
+        if (method == null) return false;
+        switch (method)
+        {
+            case "ping":
+            case "host.info":
+            case "project.get_state":
+            case "project.get_selected_events":
+            case "project.save":
+            case "media.list":
+            case "render.list_templates":
+            case "render.start":
+            case "render.status":
+            case "transport.play":
+            case "transport.stop":
+            case "transport.seek":
+                return false;
+            default:
+                return true;
+        }
+    }
+
+    private string RunOnUiThread(RpcRequest req, Func<RpcRequest, string> handler)
+    {
+        if (!MethodNeedsUndoBlock(req.Method))
+            return handler(req);
+
+        using (UndoBlock undo = new UndoBlock("Vegas Director: " + req.Method))
+        {
+            try
+            {
+                return handler(req);
+            }
+            catch (Exception)
+            {
+                try { undo.Cancel = true; } catch { }
+                throw;
+            }
+        }
     }
 
     private static string SoftFail(string id, string error)
@@ -1652,13 +1700,21 @@ public partial class EntryPoint
 
     private string ListRenderTemplates(RpcRequest req)
     {
+        // limit <= 0 means unlimited. The old default of 200/400 hid MAGIX
+        // AVC/AAC MP4 templates on installs with 500+ renderers (AVI/MXF first).
         string rf = Json.GetString(req.ParamsJson, "renderer_contains") ?? "";
         string tf = Json.GetString(req.ParamsJson, "template_contains") ?? "";
-        int limit = Json.GetInt(req.ParamsJson, "limit", 200);
+        int limit = Json.GetInt(req.ParamsJson, "limit", 0);
+        int offset = Json.GetInt(req.ParamsJson, "offset", 0);
+        if (offset < 0) offset = 0;
         StringBuilder sb = new StringBuilder("{\"ok\":true,\"templates\":[");
+        int matched = 0;
         int n = 0;
+        bool truncated = false;
+        bool stop = false;
         foreach (Renderer r in myVegas.Renderers)
         {
+            if (stop) break;
             string ft = "", rn = "";
             try { ft = r.FileTypeName ?? ""; } catch { }
             try { rn = r.Name ?? ""; } catch { }
@@ -1667,9 +1723,19 @@ public partial class EntryPoint
             {
                 foreach (RenderTemplate t in r.Templates)
                 {
-                    if (n >= limit) break;
                     string tn = t.Name ?? "";
                     if (tf.Length > 0 && tn.IndexOf(tf, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (matched < offset)
+                    {
+                        matched++;
+                        continue;
+                    }
+                    if (limit > 0 && n >= limit)
+                    {
+                        truncated = true;
+                        stop = true;
+                        break;
+                    }
                     if (n > 0) sb.Append(",");
                     sb.Append("{\"renderer\":").Append(Json.Str(ft)).Append(",\"renderer_name\":").Append(Json.Str(rn))
                       .Append(",\"template\":").Append(Json.Str(tn));
@@ -1677,11 +1743,16 @@ public partial class EntryPoint
                             .Append(",\"fps\":").Append(Json.Num(t.VideoFrameRate)).Append(",\"video_bitrate\":").Append(t.VideoBitrate); } catch { }
                     sb.Append("}");
                     n++;
+                    matched++;
                 }
             }
             catch { }
         }
-        sb.Append("],\"count\":").Append(n).Append("}");
+        sb.Append("],\"count\":").Append(n)
+          .Append(",\"offset\":").Append(offset)
+          .Append(",\"truncated\":").Append(truncated ? "true" : "false")
+          .Append(",\"limit\":").Append(limit)
+          .Append("}");
         return RpcResponse.Result(req.Id, sb.ToString());
     }
 
