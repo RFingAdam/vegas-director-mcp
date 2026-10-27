@@ -325,6 +325,60 @@ def run_oneshot(job: dict[str, Any]) -> dict:
     return get_session().run_oneshot(job)
 
 
+def _list_all_render_templates(
+    renderer_contains: str = "",
+    template_contains: str = "",
+    page_size: int = 500,
+) -> dict:
+    """Collect every matching VEGAS render template.
+
+    The host used to cap at 200/400 and MAGIX AVC/AAC MP4 templates sat
+    after that. New host: ``limit=0`` is unlimited. Old host treated
+    ``limit=0`` as empty, so we retry with a high cap and paginate when
+    ``truncated`` is set. ``offset`` is ignored by old hosts — stop if a
+    later page repeats the first item.
+    """
+    templates: list[dict[str, Any]] = []
+    offset = 0
+    last_error: dict | None = None
+    for _ in range(32):
+        limit = 0 if offset == 0 else page_size
+        listed = list_render_templates(
+            renderer_contains=renderer_contains,
+            template_contains=template_contains,
+            limit=limit,
+            offset=offset,
+        )
+        if not listed.get("ok"):
+            last_error = listed
+            break
+        page = list(listed.get("templates") or [])
+        if offset == 0 and not page:
+            # Old host: ``if (n >= limit)`` with limit=0 yields nothing.
+            listed = list_render_templates(
+                renderer_contains=renderer_contains,
+                template_contains=template_contains,
+                limit=10000,
+                offset=0,
+            )
+            if not listed.get("ok"):
+                return listed
+            page = list(listed.get("templates") or [])
+            templates.extend(page)
+            break
+        if offset > 0 and page and templates and page[0] == templates[0]:
+            break
+        templates.extend(page)
+        if not listed.get("truncated"):
+            break
+        if not page:
+            break
+        offset = len(templates)
+    if not templates and last_error is not None:
+        return last_error
+    return {"ok": True, "templates": templates, "count": len(templates)}
+
+
 def render_with_preset(
     output_path: str,
     preset: str = "vertical",
@@ -340,10 +394,18 @@ def render_with_preset(
     from .render.sidecar import verify_output, write_sidecar
 
     spec = RENDER_PRESETS.get(preset.lower())
-    listed = list_render_templates(limit=400)
+    renderer_f = (spec or {}).get("renderer_contains") or ""
+    template_f = (spec or {}).get("template_contains") or ""
+    listed = _list_all_render_templates(renderer_f, template_f)
     if not listed.get("ok"):
         return listed
     matched = match_preset(preset, listed.get("templates") or [])
+    if not matched.get("ok") and renderer_f:
+        # Host filter missed MAGIX AVC/AAC (no "MP4" in the renderer name).
+        listed = _list_all_render_templates()
+        if not listed.get("ok"):
+            return listed
+        matched = match_preset(preset, listed.get("templates") or [])
     if not matched.get("ok"):
         return matched
     started = render_start(
@@ -457,6 +519,24 @@ def set_event_gain(track_index: int, event_index: int, gain_db: float | None = N
     return _call("event.set_gain", p)
 
 
-def list_render_templates(renderer_contains: str = "", template_contains: str = "", limit: int = 200) -> dict:
-    """Exact renderer/template names for render_start."""
-    return _call("render.list_templates", {"renderer_contains": renderer_contains, "template_contains": template_contains, "limit": limit})
+def list_render_templates(
+    renderer_contains: str = "",
+    template_contains: str = "",
+    limit: int = 200,
+    offset: int = 0,
+) -> dict:
+    """Exact renderer/template names for render_start.
+
+    ``limit=0`` means unlimited on the current host. ``offset`` pages past
+    a previous batch. Interactive default stays 200; ``render_with_preset``
+    collects the full list.
+    """
+    return _call(
+        "render.list_templates",
+        {
+            "renderer_contains": renderer_contains,
+            "template_contains": template_contains,
+            "limit": limit,
+            "offset": offset,
+        },
+    )

@@ -10,9 +10,18 @@ New-Item -ItemType Directory -Force (Join-Path $here 'bin') | Out-Null
   /r:"$vegasDir\ScriptPortal.Vegas.dll" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Core.dll /r:System.Xml.dll /r:System.Data.dll `
   (Join-Path $here 'VegasDirectorHost.cs') (Join-Path $here 'VegasDirectorExtension.cs')
 if ($LASTEXITCODE -ne 0) { throw "csc failed ($LASTEXITCODE)" }
-$ext = Join-Path $env:USERPROFILE 'Documents\Vegas Application Extensions'
+
+# Known Folder MyDocuments — follows OneDrive / folder redirection.
+# $env:USERPROFILE\Documents is the wrong path when Documents lives under OneDrive.
+$docs = [Environment]::GetFolderPath('MyDocuments')
+if ([string]::IsNullOrWhiteSpace($docs)) {
+  $docs = Join-Path $env:USERPROFILE 'Documents'
+}
+$ext = Join-Path $docs 'Vegas Application Extensions'
+$scriptMenu = Join-Path $docs 'Vegas Script Menu'
 New-Item -ItemType Directory -Force $ext | Out-Null
+New-Item -ItemType Directory -Force $scriptMenu | Out-Null
 Copy-Item $out (Join-Path $ext 'VegasDirector.dll') -Force
 # Script Menu copy stays as a manual fallback (it detects the running extension and exits politely)
-Copy-Item (Join-Path $here 'VegasDirectorHost.cs') (Join-Path $env:USERPROFILE 'Documents\Vegas Script Menu\VegasDirectorHost.cs') -Force
-"built $out and installed to $ext"
+Copy-Item (Join-Path $here 'VegasDirectorHost.cs') (Join-Path $scriptMenu 'VegasDirectorHost.cs') -Force
+"built $out and installed to $ext (Documents=$docs)"

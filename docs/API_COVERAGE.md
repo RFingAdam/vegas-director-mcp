@@ -4,7 +4,9 @@ Legend: ✅ implemented in host · 🟨 partial / best-effort · ⬜ not started
 
 Based on Magix VEGAS Pro 22 Scripting FAQ patterns (Tracks/Events, Envelopes,
 Generators, VideoMotion, RenderArgs) and the Application Extensions FAQ
-(`ICustomCommandModule`, `Documents\Vegas Application Extensions`).
+(`ICustomCommandModule`, Known Folder `Documents\Vegas Application Extensions`,
+including OneDrive-redirected Documents). Extension-mode writes run inside
+an `UndoBlock` on the UI thread.
 
 | Area | MCP / RPC | Status |
 |---|---|---|
@@ -29,14 +31,14 @@ Generators, VideoMotion, RenderArgs) and the Application Extensions FAQ
 | Envelopes | `envelope.set_points` | ✅ (Volume / CompositeLevel; create if missing) |
 | Envelopes | `envelope.clear` | ✅ |
 | Transport | `transport.play/stop/seek` | ✅ |
-| Render | `render.list_templates` | ✅ |
+| Render | `render.list_templates` | ✅ (`limit=0` unlimited; `offset` pages; `truncated` when capped) |
 | Render | `render.start` | ✅ `async=true` (default) uses `Vegas.BeginRender`; `async=false` is blocking `Vegas.Render` |
 | Render | `render.status` | ✅ job_id / state / percent (progress events, no UI-marshal wait) |
 | Project | `project.set_video` | ✅ width / height / frame_rate |
 | Host start | Application Extension / Script Menu / `ensure_host` | ✅ live TCP, `/RUNSCRIPT`, or `/CMDMODULE` path; tools set `used_mode` |
 | Analysis (no VEGAS) | `probe_media`, `detect_scenes`, `analyze_audio`, `transcribe_media`, `generate_captions`, `burn_captions`, `find_highlights` | ✅ |
 | Edit helpers | `apply_crossfade`, `apply_ducking`, `apply_vertical_short`, `propose_edit` | ✅ |
-| Delivery | `render_with_preset`, `verify_output`, sidecar `<output>.edit.json` | ✅ |
+| Delivery | `render_with_preset`, `verify_output`, sidecar `<output>.edit.json` | ✅ (preset matching walks the full template list; MAGIX AVC/AAC aliases) |
 
 Soft failures return JSON-RPC **result** `{ "ok": false, "error": "..." }` (never crash VEGAS).
 

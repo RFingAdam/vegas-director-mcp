@@ -41,11 +41,14 @@ read the timeline back and revise.
 **Two ways to start the host** (same TCP interface):
 
 1. **Application Extension (preferred).** `host/build.ps1` compiles
-   `VegasDirector.dll` and installs it under
-   `Documents\Vegas Application Extensions`. VEGAS Pro 22 loads
-   `ICustomCommandModule` at startup and keeps it for the process lifetime,
-   so nobody has to open *Tools > Scripting*. Extension mode requires the
-   runtime token at `%LOCALAPPDATA%\vegas-director-mcp\token`.
+   `VegasDirector.dll` and installs it under the Windows **My Documents**
+   known folder (`Vegas Application Extensions`) — this follows OneDrive
+   redirection; `%USERPROFILE%\Documents` is the wrong path on those PCs.
+   VEGAS Pro 22 loads `ICustomCommandModule` at startup and keeps it for
+   the process lifetime, so nobody has to open *Tools > Scripting*.
+   Extension-mode writes are marshaled to the UI thread inside an
+   `UndoBlock`. Extension mode requires the runtime token at
+   `%LOCALAPPDATA%\vegas-director-mcp\token`.
 2. **Script Menu fallback.** Copy `host/VegasDirectorHost.cs` into a Script
    Menu folder and run *Tools > Scripting > VegasDirectorHost*. Leave the
    dialog open. No token required.
