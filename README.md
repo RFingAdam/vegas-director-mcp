@@ -1,9 +1,21 @@
 # vegas-director-mcp
 
 An MCP (Model Context Protocol) server that puts a model in the editor's
-chair for **MAGIX VEGAS Pro** — driving the timeline through VEGAS's own
-scripting API (`ScriptPortal.Vegas`) instead of simulated mouse/keyboard
-input.
+chair. Same tools (timeline, clips, markers, FX, render) can target more
+than one NLE:
+
+| `DIRECTOR_EDITOR` | Backend | Needs |
+|---|---|---|
+| `vegas` (default) | MAGIX VEGAS Pro via `ScriptPortal.Vegas` | Windows + VEGAS Pro 22 |
+| `resolve` | DaVinci Resolve via `DaVinciResolveScript` | **Resolve Studio 21.1+**, External scripting = Local. Free Resolve has **no** Scripting API since 21.1. |
+| `otio` | In-memory OTIO / FCPXML / MLT export | Nothing. Free Resolve can import the file. |
+
+Default is still VEGAS — existing installs do not change. Resolve setup
+and the Studio vs free line: [docs/RESOLVE.md](docs/RESOLVE.md). Other
+NLEs and what to build next: [docs/EDITORS.md](docs/EDITORS.md).
+
+The VEGAS path drives the timeline through VEGAS's own scripting API
+(`ScriptPortal.Vegas`) instead of simulated mouse/keyboard input.
 
 Inspired by the pattern used by [Bitwig MCP Server](https://github.com/WeModulate/bitwig-mcp-server)
 for DAWs, and by an early architecture sketch in
@@ -73,14 +85,21 @@ Skill: [skills/vegas-director/SKILL.md](skills/vegas-director/SKILL.md).
 ## Architecture
 
 ```
-┌─────────────────────┐     JSON-RPC / TCP      ┌──────────────────────┐
-│   MCP Server         │◄── 127.0.0.1:8752 ────►│  VEGAS Script Host    │
-│   (Python, FastMCP)  │     (loopback only)     │  (C#, inside VEGAS)   │
-│                       │                         │                       │
-│  server/vegas_director_mcp/                     │  host/VegasDirectorHost.cs
-│  - MCP tool surface   │                         │  - ScriptPortal.Vegas │
-│  - host_client.py     │                         │  - UI-thread marshal  │
-└─────────────────────┘                         └──────────────────────┘
+┌─────────────────────┐
+│   MCP Server         │  DIRECTOR_EDITOR=vegas|resolve|otio
+│   (Python, FastMCP)  │
+│                       │
+│  tools.py ──► backends/
+│               ├─ vegas   ── TCP 127.0.0.1:8752 ──► VEGAS C# host
+│               ├─ resolve ── DaVinciResolveScript ──► Resolve Studio
+│               └─ otio    ── in-memory ──► .otio / .fcpxml / .mlt
+└─────────────────────┘
+```
+
+The VEGAS path is still:
+
+```
+MCP tools ── JSON-RPC / TCP 127.0.0.1:8752 ──► host/VegasDirectorHost.cs
 ```
 
 Times on the wire are **seconds** (`start_seconds`, `length_seconds`), not
@@ -91,14 +110,23 @@ See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the wire format and
 
 ## Requirements
 
-- Windows, with **VEGAS Pro 22** (scripting surface this host was written
-  against) and a valid license. Older 18+ installs may work; they are
-  untested here.
-- Python 3.11+ for the MCP server, same machine as VEGAS (or an SSH tunnel
-  to `127.0.0.1:8752`).
-- Optional: .NET Framework 4.x `csc.exe` if you want the Application
-  Extension DLL (`host/build.ps1`). Script Menu mode does not need a compile
-  — VEGAS compiles the `.cs` when you run it.
+Depends on `DIRECTOR_EDITOR` (default `vegas`):
+
+- **VEGAS (`vegas`):** Windows, **VEGAS Pro 22**, valid license. Older 18+
+  installs may work; they are untested here. Python 3.11+ on the same
+  machine (or an SSH tunnel to `127.0.0.1:8752`). Optional: .NET Framework
+  4.x `csc.exe` for the Application Extension DLL (`host/build.ps1`).
+  Script Menu mode does not need a compile — VEGAS compiles the `.cs`
+  when you run it.
+- **Resolve (`resolve`):** **DaVinci Resolve Studio 21.1+** on Windows,
+  macOS, or Linux. The free edition has had **no Scripting API** since
+  21.1 (Blackmagic feature sheet: `Scripting API: Studio`). External
+  `scriptapp` already required Studio before that. Set
+  Preferences → System → General → **External scripting = Local**.
+  Studio-only extras: `CreateSubtitlesFromAudio`, `SmartReframe`,
+  `SetVoiceIsolationState`. See [docs/RESOLVE.md](docs/RESOLVE.md).
+- **Interchange (`otio`):** Python 3.11+ only. `project.save` writes
+  `.otio`, `.fcpxml`, or `.mlt`. Free Resolve can import OTIO/FCPXML.
 
 `ffmpeg` / `ffprobe` are required for media grounding, caption burn-in, and
 render verification. Optional: `pip install 'vegas-director-mcp[whisper]'`.
@@ -120,17 +148,35 @@ test, Claude Desktop registration.
 | `scripts/register_claude.py` | Write Claude Desktop MCP config from this checkout |
 | `skills/vegas-director/SKILL.md` | Default Short / long-form workflow |
 | `server/tests/` | Mocked host + synthetic ffmpeg fixtures |
-| `docs/` | Protocol, API coverage, setup, roadmap |
+| `docs/` | Protocol, API coverage, setup, roadmap, editors, Resolve, licensing |
 
 ## License
 
 MIT — [LICENSE](LICENSE). Affiliation and trademark notes — [NOTICE](NOTICE).
+GitHub may show the license as "Other" because LICENSE also carries MAGIX
+and CC0 notes; options for a later SPDX-clean release (and how to ask for
+SwampBewdy credit without blocking adoption) are in
+[docs/LICENSING_OPTIONS.md](docs/LICENSING_OPTIONS.md). **This repo does
+not change LICENSE in the multi-editor PR.**
 
 Initial architecture informed by a CC0-1.0 reference project (credited
 above); no code reused verbatim.
+
+## Made by SwampBewdy
+
+Built by Adam ([RFingAdam](https://github.com/RFingAdam)), who streams as
+**SwampBewdy**.
+
+- Twitch: [twitch.tv/swampbewdy](https://twitch.tv/swampbewdy)
+- YouTube: SwampBewdy
+- Discord: [discord.gg/WWvJXUS6mb](https://discord.gg/WWvJXUS6mb)
+
+If this saves you a cut, a credit is appreciated. Not required by the
+license — see [docs/LICENSING_OPTIONS.md](docs/LICENSING_OPTIONS.md).
 
 ## Contributing
 
 Issues and PRs welcome. Personal project, best-effort, not a supported
 product. How to run a checkout: [docs/SETUP.md](docs/SETUP.md). Short
-contributor notes: [CONTRIBUTING.md](CONTRIBUTING.md).
+contributor notes: [CONTRIBUTING.md](CONTRIBUTING.md). Do not merge
+multi-editor work until Adam has; the agent opens the PR only.

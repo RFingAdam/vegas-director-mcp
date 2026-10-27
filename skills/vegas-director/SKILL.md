@@ -58,3 +58,11 @@ Use **live / extension** for an interactive cut (place → inspect → revise). 
 - `host\build.ps1` and `ensure_host` install/find the DLL via the Windows **My Documents** known folder (follows OneDrive redirection). `%USERPROFILE%\Documents` is the wrong path on those PCs.
 - `replace_media` is how you swap an OBS `.mkv` for a remuxed `.mp4`.
 - If render templates still do not match after a host rebuild, `list_render_templates` (`limit=0` for the full list) and pass exact names to `render_start`.
+
+## Other editors
+
+`DIRECTOR_EDITOR=resolve` talks to **DaVinci Resolve Studio 21.1+**
+(Preferences → External scripting = Local). Free Resolve has no Scripting
+API since 21.1 — if `ping` returns `studio_required`, switch to
+`DIRECTOR_EDITOR=otio` and `save_project` a `.otio` / `.fcpxml` for import.
+See [docs/RESOLVE.md](../../docs/RESOLVE.md) and [docs/EDITORS.md](../../docs/EDITORS.md).

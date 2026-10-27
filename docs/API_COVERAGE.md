@@ -68,6 +68,16 @@ The host binds TCP `127.0.0.1:8752` only. After pulling, reload the host:
 restart VEGAS if you use the extension, or re-run
 *Tools > Scripting > VegasDirectorHost* for Script Menu mode.
 
+## Other editors
+
+Same MCP names, different backend (`DIRECTOR_EDITOR`). VEGAS coverage
+above is unchanged.
+
+- **Resolve Studio 21.1+** — [docs/RESOLVE.md](RESOLVE.md) (mapping table,
+  Studio vs free, Windows checklist). Free Resolve has no Scripting API
+  since 21.1.
+- **OTIO / FCPXML / MLT** — in-memory export; see [docs/EDITORS.md](EDITORS.md).
+
 ## Sample: `media.replace`
 
 ```json

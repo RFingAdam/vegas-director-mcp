@@ -13,8 +13,9 @@ A stranger can run the host tools with [docs/SETUP.md](docs/SETUP.md):
 3. `server/`: venv, `pip install -r requirements.txt`, `pip install -e .`,
    `python -m vegas_director_mcp`
 
-Python tests (no VEGAS): from `server/`, `pip install -e ".[dev]"` then
-`pytest`. They mock the host and generate tiny ffmpeg clips.
+Python tests (no VEGAS, no Resolve): from `server/`, `pip install -e ".[dev]"`
+then `pytest`. They mock the VEGAS host, inject a fake Resolve API, and
+generate tiny ffmpeg clips. Do not point CI at a live Resolve.
 
 Do not describe a GUI-less VEGAS — Pro 22 does not document one.
 
@@ -32,8 +33,8 @@ or patch leftovers (`*.bak`, `*_dump.txt`, already-applied `patch_*.py`).
 
 ## Affiliation
 
-This is not a MAGIX product. Keep the disclaimer in [NOTICE](NOTICE) and
-the README. Do not imply endorsement.
+This is not a MAGIX or Blackmagic product. Keep the disclaimer in
+[NOTICE](NOTICE) and the README. Do not imply endorsement.
 
 ## License
 

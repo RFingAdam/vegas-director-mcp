@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from vegas_director_mcp.backends import reset_backend
 from vegas_director_mcp.host_client import VegasHostConfig
 from vegas_director_mcp.session import Session, reset_session
 
@@ -136,6 +137,16 @@ class FakeHost:
         return self.handler(method, params)
 
 
+@pytest.fixture(autouse=True)
+def _default_vegas_backend(monkeypatch):
+    """Existing tests talk to the VEGAS session. Never attach to a live Resolve."""
+    monkeypatch.delenv("DIRECTOR_EDITOR", raising=False)
+    monkeypatch.delenv("VEGAS_DIRECTOR_EDITOR", raising=False)
+    reset_backend()
+    yield
+    reset_backend()
+
+
 @pytest.fixture
 def fake_session(monkeypatch):
     def factory(handler, reachable: bool = True):
@@ -147,7 +158,9 @@ def fake_session(monkeypatch):
         else:
             monkeypatch.setattr(session, "host_reachable", lambda: False)
         reset_session(session)
+        reset_backend()
         return host, session
 
     yield factory
     reset_session()
+    reset_backend()
