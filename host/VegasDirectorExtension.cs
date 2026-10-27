@@ -1,8 +1,13 @@
 // VegasDirectorExtension.cs — VEGAS Pro 22 Application Extension.
-// Compiled into VegasDirector.dll and copied to Documents\Vegas Application Extensions.
+// Compiled into VegasDirector.dll and copied to the real Documents folder
+// (Environment.GetFolderPath(MyDocuments) — follows OneDrive redirection)
+// \Vegas Application Extensions.
 // VEGAS loads ICustomCommandModule at startup and keeps it for the process lifetime
 // (see MAGIX VEGAS Pro 22 Scripting FAQs: Application Extensions).
 // InitializeModule starts the TCP host so MCP works without Tools > Scripting.
+// Project writes from this module go through Control.BeginInvoke (UI thread)
+// plus UndoBlock — VEGAS does not wrap extension mutations the way it wraps
+// Script Menu runs, and missing UndoBlock is COM E_UNEXPECTED.
 
 using System;
 using System.Collections;

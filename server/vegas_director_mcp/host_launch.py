@@ -9,9 +9,10 @@ command-line switches (Using Scripting help):
   Vegas220.exe /SCRIPTARGS "name=value" /SCRIPT "script.cs"
   Vegas220.exe /CMDMODULE "extension.dll"
 
-Application Extensions in Documents\\Vegas Application Extensions are loaded
-at startup and stay loaded (Application Extensions FAQ). That is the
-preferred auto-start path. /RUNSCRIPT is the Script Menu fallback.
+Application Extensions in the real Documents\\Vegas Application Extensions
+folder (Windows Known Folder MyDocuments — follows OneDrive redirection)
+are loaded at startup and stay loaded (Application Extensions FAQ). That
+is the preferred auto-start path. /RUNSCRIPT is the Script Menu fallback.
 """
 from __future__ import annotations
 
@@ -20,6 +21,8 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from .windows_paths import vegas_application_extensions_dir
 
 
 DEFAULT_EXE_CANDIDATES = [
@@ -41,12 +44,38 @@ def host_script_path() -> Path:
 
 
 def extension_dll_candidates() -> list[Path]:
-    home = Path.home()
-    return [
-        home / "Documents" / "Vegas Application Extensions" / "VegasDirector.dll",
-        Path(os.environ.get("LOCALAPPDATA", "")) / "VEGAS Pro" / "22.0" / "Application Extensions" / "VegasDirector.dll",
+    """DLL locations VEGAS Pro 22 actually scans (Application Extensions FAQ).
+
+    Documents is the Known Folder path, not ``%USERPROFILE%\\Documents``.
+    """
+    local = os.environ.get("LOCALAPPDATA") or ""
+    roaming = os.environ.get("APPDATA") or ""
+    programdata = os.environ.get("PROGRAMDATA") or ""
+    docs_dll = vegas_application_extensions_dir() / "VegasDirector.dll"
+    # Keep Path.home()/Documents as a last-resort extra in case Known Folder
+    # resolution failed on a weird install — skip it when it is the same path.
+    naive_docs_dll = Path.home() / "Documents" / "Vegas Application Extensions" / "VegasDirector.dll"
+    candidates = [
+        docs_dll,
+        Path(local) / "VEGAS Pro" / "22.0" / "Application Extensions" / "VegasDirector.dll",
+        Path(roaming) / "VEGAS Pro" / "22.0" / "Application Extensions" / "VegasDirector.dll",
+        Path(programdata) / "Vegas Pro" / "22.0" / "Application Extensions" / "VegasDirector.dll",
+        Path(local) / "Vegas Pro" / "Application Extensions" / "VegasDirector.dll",
+        Path(roaming) / "Vegas Pro" / "Application Extensions" / "VegasDirector.dll",
+        Path(programdata) / "Vegas Pro" / "Application Extensions" / "VegasDirector.dll",
         repo_root() / "host" / "bin" / "VegasDirector.dll",
     ]
+    if naive_docs_dll != docs_dll:
+        candidates.append(naive_docs_dll)
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for p in candidates:
+        key = str(p)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(p)
+    return unique
 
 
 def find_vegas_exe() -> str | None:

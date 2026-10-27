@@ -56,8 +56,8 @@ Host-backed helpers:
 ## Dual-mode host (complete, documented against Pro 22 help)
 VEGAS Pro 22 does **not** ship a GUI-less render farm. Official switches are
 `/NOLOGO`, `/OPEN`, `/RUNSCRIPT` (`/SCRIPT`), `/SCRIPTARGS`, `/CMDMODULE`.
-Application Extensions load at startup from
-`Documents\Vegas Application Extensions`.
+Application Extensions load at startup from the Known Folder
+`Documents\Vegas Application Extensions` (OneDrive-aware).
 
 Same MCP tools pick a mode and set `used_mode`:
 
