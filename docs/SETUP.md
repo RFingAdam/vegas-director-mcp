@@ -36,14 +36,23 @@ same folder.
    powershell -ExecutionPolicy Bypass -File host\build.ps1
    ```
 
-   `build.ps1` compiles `VegasDirectorHost.cs` + `VegasDirectorExtension.cs`
-   against `C:\Program Files\VEGAS\VEGAS Pro 22.0\ScriptPortal.Vegas.dll`
-   and copies `VegasDirector.dll` to
-   `<MyDocuments>\Vegas Application Extensions\` (Known Folder, follows
-   OneDrive). It also copies the `.cs` host into
-   `<MyDocuments>\Vegas Script Menu\` as a manual fallback. The script
-   prints the resolved Documents path.
-3. Start **VEGAS Pro 22**. The host should already be listening — no
+   `build.ps1` builds one `VegasDirector.dll` per installed VEGAS, each
+   compiled against that version's own `ScriptPortal.Vegas.dll` (it is
+   strong-named per release: 22.0.0.250 vs 2027.0.0.31):
+
+   | VEGAS | Install dir | Extension folder |
+   |---|---|---|
+   | Pro 22 | `C:\Program Files\VEGAS\VEGAS Pro 22.0` | `%LOCALAPPDATA%\VEGAS Pro\22.0\Application Extensions` |
+   | Boris FX Pro 2027 | `C:\Program Files\BorisFX\Vegas Pro 2027` | `%LOCALAPPDATA%\VEGAS Pro\2027.0\Application Extensions` |
+
+   `-Version 22` or `-Version 2027` builds just one. `VEGAS_DIR` +
+   `VEGAS_APPVER` override a non-default install. The shared
+   `<MyDocuments>\Vegas Application Extensions\` folder is scanned by every
+   version, so the script no longer installs there and renames an old copy
+   to `*.shared-legacy.disabled`. It also copies the `.cs` host into
+   `<MyDocuments>\Vegas Script Menu\` (Known Folder, follows OneDrive) as a
+   manual fallback.
+3. Start **VEGAS** (2027 or 22). The host should already be listening — no
    *Tools > Scripting* step.
 4. Optional status pane: *View > Extensions > Vegas Director Host*.
 5. Extension mode writes a per-user token to

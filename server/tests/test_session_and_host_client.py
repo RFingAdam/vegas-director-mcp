@@ -34,7 +34,9 @@ def test_client_includes_token(monkeypatch):
     assert sent["method"] == "ping"
 
 
-def test_launch_vegas_soft_fails_off_windows():
+def test_launch_vegas_soft_fails_off_windows(monkeypatch):
+    # Force the non-Windows path so this never starts a real VEGAS on a dev box.
+    monkeypatch.setattr("vegas_director_mcp.host_launch.sys.platform", "linux")
     result = launch_vegas()
     assert result["ok"] is False
     assert "Windows" in result["error"]

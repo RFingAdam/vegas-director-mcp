@@ -54,6 +54,22 @@ class Session:
         if wait is None:
             wait = float(os.environ.get("VEGAS_HOST_LAUNCH_WAIT", "45"))
 
+        if vegas_running():
+            # VEGAS is up but nothing is listening: the extension did not load in this
+            # instance (installed after VEGAS started, wrong version folder, or disabled).
+            # Do not spawn a second VEGAS.
+            self.last_mode = "none"
+            return {
+                "ok": False,
+                "used_mode": "none",
+                "vegas_was_running": True,
+                "error": (
+                    "VEGAS is running but the host is not listening on 127.0.0.1:8752. "
+                    "Restart VEGAS so the Application Extension loads (run host\\build.ps1 first), "
+                    "or run Tools > Scripting > VegasDirectorHost."
+                ),
+            }
+
         launched = launch_vegas(project_path=project_path)
         if not launched.get("ok"):
             self.last_mode = "none"

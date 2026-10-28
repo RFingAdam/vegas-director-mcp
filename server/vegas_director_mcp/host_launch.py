@@ -25,11 +25,15 @@ from pathlib import Path
 from .windows_paths import vegas_application_extensions_dir
 
 
+# Newest first. Boris FX VEGAS Pro 2027 installs under C:\Program Files\BorisFX.
 DEFAULT_EXE_CANDIDATES = [
+    r"C:\Program Files\BorisFX\Vegas Pro 2027\vegas2027.exe",
     r"C:\Program Files\VEGAS\VEGAS Pro 22.0\Vegas220.exe",
     r"C:\Program Files\VEGAS\VEGAS Pro 22\Vegas220.exe",
     r"C:\Program Files (x86)\VEGAS\VEGAS Pro 22.0\Vegas220.exe",
 ]
+
+VEGAS_IMAGE_NAMES = ("vegas2027.exe", "Vegas220.exe")
 
 
 def repo_root() -> Path:
@@ -57,6 +61,9 @@ def extension_dll_candidates() -> list[Path]:
     naive_docs_dll = Path.home() / "Documents" / "Vegas Application Extensions" / "VegasDirector.dll"
     candidates = [
         docs_dll,
+        # Per-version folders written by host\build.ps1 (one build per ScriptPortal.Vegas version).
+        Path(local) / "VEGAS Pro" / "2027.0" / "Application Extensions" / "VegasDirector.dll",
+        Path(roaming) / "VEGAS Pro" / "2027.0" / "Application Extensions" / "VegasDirector.dll",
         Path(local) / "VEGAS Pro" / "22.0" / "Application Extensions" / "VegasDirector.dll",
         Path(roaming) / "VEGAS Pro" / "22.0" / "Application Extensions" / "VegasDirector.dll",
         Path(programdata) / "Vegas Pro" / "22.0" / "Application Extensions" / "VegasDirector.dll",
@@ -85,8 +92,11 @@ def find_vegas_exe() -> str | None:
     for cand in DEFAULT_EXE_CANDIDATES:
         if os.path.isfile(cand):
             return cand
-    found = shutil.which("Vegas220") or shutil.which("Vegas220.exe")
-    return found
+    for name in VEGAS_IMAGE_NAMES:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
 
 
 def extension_installed() -> bool:
@@ -97,13 +107,16 @@ def vegas_running() -> bool:
     if sys.platform != "win32":
         return False
     try:
-        proc = subprocess.run(
-            ["tasklist", "/FI", "IMAGENAME eq Vegas220.exe"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return "Vegas220.exe" in (proc.stdout or "")
+        for image in VEGAS_IMAGE_NAMES:
+            proc = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {image}"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if image.lower() in (proc.stdout or "").lower():
+                return True
+        return False
     except (OSError, subprocess.TimeoutExpired):
         return False
 
@@ -130,8 +143,8 @@ def launch_vegas(
         return {
             "ok": False,
             "error": (
-                "Vegas220.exe not found. Set VEGAS_EXE to the Pro 22 executable "
-                "or install to C:\\Program Files\\VEGAS\\VEGAS Pro 22.0\\"
+                "VEGAS exe not found. Set VEGAS_EXE to vegas2027.exe or Vegas220.exe "
+                "(default installs: C:\\Program Files\\BorisFX\\Vegas Pro 2027\\, C:\\Program Files\\VEGAS\\VEGAS Pro 22.0\\)"
             ),
         }
     args = [exe, "/NOLOGO"]
@@ -174,7 +187,7 @@ def run_oneshot_script(script_path: str, *, project_path: str | None = None, scr
         return {"ok": False, "error": "one-shot /RUNSCRIPT requires Windows + VEGAS Pro 22"}
     exe = find_vegas_exe()
     if not exe:
-        return {"ok": False, "error": "Vegas220.exe not found (set VEGAS_EXE)"}
+        return {"ok": False, "error": "VEGAS exe not found (set VEGAS_EXE)"}
     if not os.path.isfile(script_path):
         return {"ok": False, "error": f"script not found: {script_path}"}
     args = [exe, "/NOLOGO"]
