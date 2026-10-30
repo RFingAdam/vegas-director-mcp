@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from vegas_director_mcp.backends import reset_backend
-from vegas_director_mcp.host_client import VegasHostConfig
-from vegas_director_mcp.session import Session, reset_session
+from nle_mcp.backends import reset_backend
+from nle_mcp.host_client import VegasHostConfig
+from nle_mcp.session import Session, reset_session
 
 
 @pytest.fixture(scope="session")
 def ffmpeg_bin() -> str:
-    from vegas_director_mcp.analysis.ffmpeg_util import which_ffmpeg
+    from nle_mcp.analysis.ffmpeg_util import which_ffmpeg
 
     return which_ffmpeg("ffmpeg")
 
@@ -88,7 +88,7 @@ def scene_clip(media_dir: Path, ffmpeg_bin: str) -> Path:
 
 @pytest.fixture
 def spike_clip(media_dir: Path, ffmpeg_bin: str) -> Path:
-    """Quiet tone, then a loud burst at ~1.2s (kill/cash stand-in)."""
+    """Quiet tone, then a loud burst at ~1.2s."""
     out = media_dir / "spikes.mp4"
     _run_ffmpeg(
         [

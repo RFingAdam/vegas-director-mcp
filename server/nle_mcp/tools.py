@@ -1,4 +1,4 @@
-"""MCP tool definitions backed by the VEGAS script host."""
+"""MCP tool definitions backed by the current editor backend."""
 from __future__ import annotations
 
 import os
@@ -318,7 +318,7 @@ def set_project_video(
 
 
 def ensure_host(project_path: str | None = None) -> dict:
-    """Reach the current editor (VEGAS host, Resolve Studio, or the OTIO memory store)."""
+    """Reach the current editor (FFmpeg, VEGAS host, Resolve Studio, or OTIO store)."""
     from .backends import get_backend
 
     return get_backend().ensure(project_path)

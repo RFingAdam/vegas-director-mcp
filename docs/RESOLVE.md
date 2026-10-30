@@ -102,9 +102,9 @@ still uses the venv Python; set the three variables above.
 ```json
 {
   "mcpServers": {
-    "vegas-director": {
+    "nle-mcp": {
       "command": "C:\\path\\to\\vegas-director-mcp\\server\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "vegas_director_mcp"],
+      "args": ["-m", "nle_mcp"],
       "cwd": "C:\\path\\to\\vegas-director-mcp\\server",
       "env": {
         "DIRECTOR_EDITOR": "resolve",
@@ -148,14 +148,14 @@ Legend: ✅ 1:1 · 🟨 partial / different metaphor · ❌ unsupported
 | `render.list_templates` | built-in 1080/vertical/4k rows + `GetRenderPresetList` | ✅ |
 | `render.start` / `render.status` | `SetRenderSettings`, `AddRenderJob`, `StartRendering`, `GetRenderJobStatus` | ✅ |
 | `marker.*` | `Timeline.AddMarker` / `GetMarkers` | ✅ |
-| `apply_vertical_short` etc. | composed from the rows above | 🟨 motion is a static punch-in |
+| `set_motion_keyframes` (composed) | last inspector Zoom/Pan | 🟨 no curve API |
 
 Times stay in **seconds** on the MCP side. The backend converts with the
 timeline frame rate (`GetSetting("timelineFrameRate")`). Resolve track
 indices are 1-based internally; MCP `track_index` is 0-based, video then
 audio then subtitle.
 
-## Manual test checklist (Adam, Windows + Resolve Studio)
+## Manual test checklist (Windows + Resolve Studio)
 
 VEGAS is not required for this path. Free Resolve will fail on step 4 with
 `reason: free_edition` or `scripting_unavailable` — that is expected.
@@ -169,7 +169,7 @@ VEGAS is not required for this path. Free Resolve will fail on step 4 with
    set RESOLVE_SCRIPT_LIB=C:\Program Files\Blackmagic Design\DaVinci Resolve\fusionscript.dll
    set PYTHONPATH=%RESOLVE_SCRIPT_API%\Modules
    .venv\Scripts\activate
-   python -c "from vegas_director_mcp.tools import ping, editor_info, get_project_state; print(ping()); print(editor_info()); print(get_project_state())"
+   python -c "from nle_mcp.tools import ping, editor_info, get_project_state; print(ping()); print(editor_info()); print(get_project_state())"
    ```
 4. `ping` / `editor_info` should show `ok: true`, `editor: resolve`,
    `studio: true`, product containing `Studio`.

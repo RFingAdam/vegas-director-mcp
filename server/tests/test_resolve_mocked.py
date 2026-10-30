@@ -1,10 +1,10 @@
 """Resolve backend tests. All Resolve objects are fakes — no live app."""
 from __future__ import annotations
 
-from vegas_director_mcp.backends import reset_backend
-from vegas_director_mcp.backends.resolve import ResolveBackend
-from vegas_director_mcp.backends.resolve.connect import FREE_EDITION, SCRIPTING_UNAVAILABLE
-from vegas_director_mcp import tools
+from nle_mcp.backends import reset_backend
+from nle_mcp.backends.resolve import ResolveBackend
+from nle_mcp.backends.resolve.connect import FREE_EDITION, SCRIPTING_UNAVAILABLE
+from nle_mcp import tools
 
 from fake_resolve import FakeResolve
 
@@ -66,7 +66,7 @@ def test_free_edition_is_refused():
 def test_place_trim_move_delete_and_motion():
     backend = _studio()
     tools.add_track("video", "Short V1")
-    placed = tools.add_video_event(0, r"D:\media\wardogs.mp4", 0.0, 8.0)
+    placed = tools.add_video_event(0, r"D:\media\clip.mp4", 0.0, 8.0)
     assert placed["ok"] is True
     trimmed = tools.trim_event(0, 0, start_seconds=1.0, length_seconds=5.0, take_offset_seconds=2.0)
     assert trimmed["ok"] is True
@@ -112,7 +112,7 @@ def test_render_templates_include_vertical_preset():
 
 def test_studio_only_helpers():
     backend = _studio()
-    tools.add_video_event(0, r"D:\media\wardogs.mp4", 0.0, 4.0)
+    tools.add_video_event(0, r"D:\media\clip.mp4", 0.0, 4.0)
     subs = tools.resolve_create_subtitles()
     assert subs["ok"] is True
     assert backend._resolve().project.current_timeline.subtitles_called is True

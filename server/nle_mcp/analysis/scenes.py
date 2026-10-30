@@ -16,7 +16,7 @@ def detect_scenes(path: str, threshold: float = 0.30) -> dict[str, Any]:
     """Return scene-cut timestamps using ffmpeg's scene score.
 
     `threshold` is the lavfi scene score (0..1). 0.3 is a reasonable default
-    for gameplay cuts; lower it for subtler edits.
+    for hard cuts; lower it for subtler edits.
     """
     if not path:
         return {"ok": False, "error": "path is required"}

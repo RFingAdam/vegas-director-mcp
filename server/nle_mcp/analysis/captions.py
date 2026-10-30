@@ -1,4 +1,4 @@
-"""SRT / ASS captions plus an ffmpeg burned-in vertical Short style."""
+"""SRT / ASS captions plus optional ffmpeg burn-in."""
 from __future__ import annotations
 
 import os
@@ -82,30 +82,20 @@ def _cues_from_input(
 
 
 def _ass_header(style: str) -> str:
-    # PlayRes 1080x1920 — vertical Shorts. Big, high-contrast, thick outline.
-    if style in {"shorts", "vertical", "burned"}:
-        font, size, primary, outline_c, outline, margin_v = (
-            "Arial Black",
-            92,
-            "&H00FFFFFF",
-            "&H00000000",
-            8,
-            220,
-        )
+    key = (style or "default").lower()
+    if key in {"shorts", "vertical", "portrait"}:
+        # Generic 9:16 layout. "shorts" is a deprecated alias of "vertical".
+        play_x, play_y = 1080, 1920
+        font, size, outline, margin_v = "Arial", 64, 6, 160
     else:
-        font, size, primary, outline_c, outline, margin_v = (
-            "Arial",
-            48,
-            "&H00FFFFFF",
-            "&H00000000",
-            4,
-            40,
-        )
+        play_x, play_y = 1920, 1080
+        font, size, outline, margin_v = "Arial", 48, 4, 40
+    primary, outline_c = "&H00FFFFFF", "&H00000000"
     return (
         "[Script Info]\n"
         "ScriptType: v4.00+\n"
-        "PlayResX: 1080\n"
-        "PlayResY: 1920\n"
+        f"PlayResX: {play_x}\n"
+        f"PlayResY: {play_y}\n"
         "WrapStyle: 0\n"
         "ScaledBorderAndShadow: yes\n"
         "\n"
@@ -127,11 +117,11 @@ def generate_captions(
     segments: list[dict[str, Any]] | None = None,
     words: list[dict[str, Any]] | None = None,
     output_dir: str | None = None,
-    style: str = "shorts",
+    style: str = "default",
     group_words: bool = True,
     stem: str | None = None,
 ) -> dict[str, Any]:
-    """Write SRT + ASS next to the media (or output_dir). No VEGAS required."""
+    """Write SRT + ASS next to the media (or output_dir). No NLE required."""
     cues = _cues_from_input(segments, words, group_words)
     if not cues:
         return {"ok": False, "error": "no caption cues (pass segments or words)"}

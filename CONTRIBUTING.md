@@ -1,17 +1,27 @@
 # Contributing
 
-Personal project, best-effort. Issues and PRs are welcome.
+Issues and PRs are welcome.
 
 ## Run a checkout
 
-A stranger can run the host tools with [docs/SETUP.md](docs/SETUP.md):
+Headless (no NLE): [docs/FFMPEG.md](docs/FFMPEG.md)
 
-1. Windows + VEGAS Pro 22
+```
+cd server
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+pytest
+python -m nle_mcp
+```
+
+VEGAS live host: [docs/SETUP.md](docs/SETUP.md)
+
+1. Windows + VEGAS Pro 22+
 2. Prefer `host\build.ps1` (Application Extension auto-start), or copy
    `host/VegasDirectorHost.cs` into a Script Menu folder and run
    *Tools > Scripting > VegasDirectorHost*
-3. `server/`: venv, `pip install -r requirements.txt`, `pip install -e .`,
-   `python -m vegas_director_mcp`
+3. `python -m nle_mcp` (`python -m vegas_director_mcp` still works)
 
 Python tests (no VEGAS, no Resolve): from `server/`, `pip install -e ".[dev]"`
 then `pytest`. They mock the VEGAS host, inject a fake Resolve API, and
@@ -38,4 +48,4 @@ This is not a MAGIX or Blackmagic product. Keep the disclaimer in
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). Do not change the license terms in drive-by PRs.

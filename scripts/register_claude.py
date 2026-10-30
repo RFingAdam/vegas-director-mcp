@@ -1,4 +1,4 @@
-"""Register vegas-director as a stdio MCP server in Claude Desktop.
+"""Register nle-mcp as a stdio MCP server in Claude Desktop.
 
 Uses the checkout that contains this script. Does not hard-code a user path.
 Restart the Claude desktop app afterwards for the tools to appear.
@@ -48,21 +48,32 @@ def main() -> int:
         data = json.load(fh)
 
     servers = data.setdefault("mcpServers", {})
-    servers["vegas-director"] = {
+    servers["nle-mcp"] = {
         "command": str(venv_python),
-        "args": ["-m", "vegas_director_mcp"],
+        "args": ["-m", "nle_mcp"],
         "cwd": str(server_dir),
         "env": {
+            "DIRECTOR_EDITOR": os.environ.get("DIRECTOR_EDITOR", "ffmpeg"),
             "VEGAS_HOST_TRANSPORT": "tcp",
             "VEGAS_HOST_ADDRESS": "127.0.0.1",
             "VEGAS_HOST_PORT": "8752",
             "PYTHONPATH": str(server_dir),
         },
     }
+    # Keep the old key pointing at the same command so existing configs still work.
+    servers.setdefault(
+        "vegas-director",
+        {
+            "command": str(venv_python),
+            "args": ["-m", "vegas_director_mcp"],
+            "cwd": str(server_dir),
+            "env": servers["nle-mcp"]["env"],
+        },
+    )
     with cfg.open("w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2)
         fh.write("\n")
-    print(f"registered vegas-director in {cfg}")
+    print(f"registered nle-mcp in {cfg}")
     print(f"backup: {backup}")
     return 0
 

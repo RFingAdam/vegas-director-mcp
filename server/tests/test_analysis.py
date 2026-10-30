@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from vegas_director_mcp.analysis.audio import analyze_audio
-from vegas_director_mcp.analysis.captions import generate_captions
-from vegas_director_mcp.analysis.highlights import find_highlights
-from vegas_director_mcp.analysis.probe import probe_media
-from vegas_director_mcp.analysis.scenes import detect_scenes
-from vegas_director_mcp.analysis.whisper import transcribe_media
+from nle_mcp.analysis.audio import analyze_audio
+from nle_mcp.analysis.captions import generate_captions
+from nle_mcp.analysis.probe import probe_media
+from nle_mcp.analysis.scenes import detect_scenes
+from nle_mcp.analysis.whisper import transcribe_media
+from nle_mcp import find_highlights
 
 
 def test_probe_color_clip(color_clip):
@@ -42,9 +42,13 @@ def test_analyze_audio_finds_spike(spike_clip):
     assert result["spike_count"] >= 1
     times = [s["at_seconds"] for s in result["spikes"]]
     assert any(0.8 <= t <= 1.8 for t in times)
+    kinds = {s.get("kind") for s in result["spikes"]}
+    assert kinds <= {"peak", "loud", "rise"}
+    assert "kill_cash" not in kinds
+    assert "squad_shout" not in kinds
 
 
-def test_captions_srt_ass(tmp_path, color_clip):
+def test_captions_srt_ass_default(tmp_path, color_clip):
     cues = [
         {"start_seconds": 0.0, "end_seconds": 0.8, "text": "hook"},
         {"start_seconds": 0.8, "end_seconds": 1.6, "text": "payoff"},
@@ -53,7 +57,7 @@ def test_captions_srt_ass(tmp_path, color_clip):
         path=str(color_clip),
         segments=cues,
         output_dir=str(tmp_path),
-        style="shorts",
+        style="default",
         group_words=False,
     )
     assert result["ok"] is True
@@ -61,35 +65,49 @@ def test_captions_srt_ass(tmp_path, color_clip):
     ass = (tmp_path / "bars.ass").read_text(encoding="utf-8")
     assert "hook" in srt and "payoff" in srt
     assert "-->" in srt
+    assert "PlayResX: 1920" in ass
+    assert "PlayResY: 1080" in ass
+    assert "Arial" in ass
+    assert "Arial Black" not in ass
+    assert "Dialogue:" in ass
+
+
+def test_captions_vertical_style(tmp_path):
+    cues = [{"start_seconds": 0.0, "end_seconds": 1.0, "text": "hello"}]
+    result = generate_captions(
+        segments=cues,
+        output_dir=str(tmp_path),
+        style="vertical",
+        group_words=False,
+        stem="vert",
+    )
+    assert result["ok"] is True
+    ass = (tmp_path / "vert.ass").read_text(encoding="utf-8")
     assert "PlayResX: 1080" in ass
     assert "PlayResY: 1920" in ass
-    assert "Arial Black" in ass
-    assert "Dialogue:" in ass
+    assert "Arial Black" not in ass
 
 
 def test_word_grouped_captions(tmp_path):
     words = [
-        {"start_seconds": 0.0, "end_seconds": 0.2, "word": "oh"},
-        {"start_seconds": 0.2, "end_seconds": 0.4, "word": "my"},
-        {"start_seconds": 0.4, "end_seconds": 0.6, "word": "god"},
-        {"start_seconds": 0.6, "end_seconds": 0.8, "word": "down"},
-        {"start_seconds": 2.0, "end_seconds": 2.2, "word": "nice"},
+        {"start_seconds": 0.0, "end_seconds": 0.2, "word": "one"},
+        {"start_seconds": 0.2, "end_seconds": 0.4, "word": "two"},
+        {"start_seconds": 0.4, "end_seconds": 0.6, "word": "three"},
+        {"start_seconds": 0.6, "end_seconds": 0.8, "word": "four"},
+        {"start_seconds": 2.0, "end_seconds": 2.2, "word": "five"},
     ]
     result = generate_captions(words=words, output_dir=str(tmp_path), stem="grouped")
     assert result["ok"] is True
     assert result["cue_count"] >= 2
     joined = " ".join(c["text"] for c in result["cues"])
-    assert "oh" in joined and "nice" in joined
+    assert "one" in joined and "five" in joined
 
 
-def test_find_highlights_ranks_spike(spike_clip):
-    result = find_highlights(str(spike_clip), min_seconds=20, max_seconds=35, max_candidates=3)
-    assert result["ok"] is True
-    assert result["clamped_to_media"] is True
-    assert result["candidate_count"] >= 1
-    top = result["candidates"][0]
-    assert top["out_seconds"] > top["in_seconds"]
-    assert top["reasons"]
+def test_find_highlights_removed():
+    result = find_highlights("/tmp/unused.mp4")
+    assert result["ok"] is False
+    assert result["removed"] is True
+    assert result["tool"] == "find_highlights"
 
 
 def test_whisper_soft_fail_or_runs(color_clip):

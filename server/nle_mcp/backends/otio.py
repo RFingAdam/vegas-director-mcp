@@ -70,7 +70,7 @@ class OtioBackend:
 
     def info(self) -> dict[str, Any]:
         return ok(
-            host="otio-director",
+            host="otio",
             mode="memory",
             editor=self.name,
             product="OpenTimelineIO / FCPXML / MLT interchange",
@@ -81,7 +81,7 @@ class OtioBackend:
     def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
         handler = {
-            "ping": lambda _p: ok(host="otio-director", mode="memory", editor=self.name),
+            "ping": lambda _p: ok(host="otio", mode="memory", editor=self.name),
             "host.info": lambda _p: self.info(),
             "editor.info": lambda _p: self.info(),
             "editor.capabilities": lambda _p: self.capabilities(),

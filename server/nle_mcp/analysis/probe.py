@@ -1,4 +1,4 @@
-"""probe_media — ffprobe wrapper. No VEGAS required."""
+"""probe_media — ffprobe wrapper. No NLE required."""
 from __future__ import annotations
 
 import os

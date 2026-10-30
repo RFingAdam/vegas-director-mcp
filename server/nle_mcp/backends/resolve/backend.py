@@ -954,7 +954,7 @@ class ResolveBackend:
         if not keys:
             return ok(keyframes=0, partial=True, note="No keyframes; inspector reset only.")
         # Public API has no inspector keyframe curve. Apply the last keyframe
-        # as Zoom/Pan (enough for apply_vertical_short's punch-in).
+        # as Zoom/Pan.
         last = keys[-1]
         scale = float(last.get("scale") or 1.0)
         pan_x = float(last.get("pan_x") or 0.0)

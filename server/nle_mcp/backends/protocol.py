@@ -1,8 +1,9 @@
 """Shared editor-backend contract.
 
 MCP tools keep their names and JSON shapes. Each backend implements the same
-RPC method strings the VEGAS host already speaks (`project.get_state`,
-`track.add`, …) plus a few extras (`marker.*`, `editor.capabilities`).
+RPC method strings (`project.get_state`, `track.add`, …) plus extras
+(`marker.*`, `editor.capabilities`). VEGAS, Resolve, FFmpeg, and OTIO all
+speak this interface.
 
 A backend is a small object with `call(method, params) -> dict`. Soft failures
 are `{ok: false, error}` — never exceptions out to the MCP client.
