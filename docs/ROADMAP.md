@@ -15,8 +15,8 @@
 - `event.set_fades` — FadeIn/Out Length + Smooth curve; optional Dissolve;
   reciprocal_curve for overlaps.
 - `event.set_opacity` — FadeIn.Gain.
-- `event.add_title` — Titles & Text generator + OFX Text RTF (PNG lower-thirds
-  remain as branded backup under ironhaven thumbs).
+- `event.add_title` — Titles & Text generator + OFX Text RTF (PNG overlays
+  if the generator is missing).
 - `track.set_composite_level` — track opacity.
 - `envelope.set_points` — Volume / CompositeLevel create-or-update points.
 - `project.get_selected_events` — selected track/event indices.
@@ -34,17 +34,15 @@ Pure Python + ffmpeg (no VEGAS):
 
 - `probe_media` (ffprobe)
 - `detect_scenes` (ffmpeg scene score)
-- `analyze_audio` — windowed RMS/peak, classifies reaction / kill_cash / squad_shout
+- `analyze_audio` — windowed RMS/peak spikes
 - `transcribe_media` — optional `faster-whisper`; CUDA if ctranslate2 sees a GPU, else CPU int8; soft-fail if the extra is missing
-- `generate_captions` / `burn_captions` — SRT + 1080×1920 ASS (Arial Black, thick outline) and ffmpeg burn-in
-- `find_highlights` — ranks 20–35 s windows with in/out + reasons
+- `generate_captions` / `burn_captions` — generic SRT + ASS and ffmpeg burn-in
+- File-level `cut_media`, `concat_media`, `reframe_media`, `mix_audio`, `normalize_audio`
 
 Host-backed helpers:
 
 - `apply_crossfade`, `apply_ducking`
-- `apply_vertical_short` — 16:9→9:16 crop/pan, punch-in, captions track, loop-friendly fade
-- `propose_edit` — find/accept a window, place, inspect, revise
-- `project.set_video` — 1080×1920 etc.
+- `project.set_video` — output frame size / fps
 
 ## Phase 4 — Render & delivery (complete)
 - Named presets: `vertical` (1080×1920), `1080p`, `4k` via `render_with_preset`
@@ -65,17 +63,18 @@ Same MCP tools pick a mode and set `used_mode`:
 - `launched_extension` / `launched_runscript` — `ensure_host` starts VEGAS
 - `oneshot_runscript` — generated `.cs` + sibling `.job.json`
 
-See [skills/vegas-director/SKILL.md](../skills/vegas-director/SKILL.md).
+See [skills/nle-mcp/SKILL.md](../skills/nle-mcp/SKILL.md).
 
 ## Non-goals (for now)
 - Full VEGAS UI parity — editing/automation surface, not remote desktop.
 - Multi-user/remote collaboration — single local VEGAS instance only.
 - True GUI-less VEGAS.
 
-## Multi-editor adapter (started)
+## Multi-editor adapter
 
-- Backend protocol under `server/vegas_director_mcp/backends/`.
-- VEGAS default unchanged.
+- Shared backend protocol under `server/nle_mcp/backends/`.
+- FFmpeg headless backend (cut, concat, mix, reframe, render).
+- VEGAS default unchanged for existing installs.
 - Resolve Studio 21.1+ live backend (free edition has no API).
-- OTIO / FCPXML / MLT export for free-editor adoption.
+- OTIO / FCPXML / MLT as plain timeline I/O.
 - Next live candidate: Premiere Pro UXP — [docs/EDITORS.md](EDITORS.md).

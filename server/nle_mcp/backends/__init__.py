@@ -1,10 +1,9 @@
-"""Editor backends. Default is VEGAS so existing installs keep working.
+"""Editor backends. Select with DIRECTOR_EDITOR (or VEGAS_DIRECTOR_EDITOR).
 
-Select an editor with DIRECTOR_EDITOR (or VEGAS_DIRECTOR_EDITOR):
-
-  vegas     MAGIX VEGAS Pro (C# host, TCP 127.0.0.1:8752) — default
+  ffmpeg    Headless ffmpeg (probe, cut, concat, mix, reframe, render)
+  vegas     MAGIX VEGAS Pro (C# host, TCP 127.0.0.1:8752) — default, for existing installs
   resolve   DaVinci Resolve Studio via DaVinciResolveScript / fusionscript
-  otio      In-memory timeline; project.save writes .otio or .mlt
+  otio      In-memory timeline I/O; project.save writes .otio / .fcpxml / .mlt
 """
 from __future__ import annotations
 
@@ -15,6 +14,9 @@ from .protocol import EditorBackend, fail
 from .vegas import VegasBackend
 
 KNOWN_EDITORS = {
+    "ffmpeg": "ffmpeg",
+    "ff": "ffmpeg",
+    "headless": "ffmpeg",
     "vegas": "vegas",
     "vegas-pro": "vegas",
     "vegas_pro": "vegas",
@@ -44,6 +46,10 @@ def editor_from_env() -> str:
 
 def create_backend(name: str | None = None, **kwargs: Any) -> EditorBackend:
     editor = name or editor_from_env()
+    if editor == "ffmpeg":
+        from .ffmpeg import FfmpegBackend
+
+        return FfmpegBackend(**kwargs)
     if editor == "vegas":
         return VegasBackend(**kwargs)
     if editor == "resolve":
@@ -55,7 +61,7 @@ def create_backend(name: str | None = None, **kwargs: Any) -> EditorBackend:
 
         return OtioBackend(**kwargs)
     raise ValueError(
-        f"Unknown editor {editor!r}. Use one of: vegas, resolve, otio "
+        f"Unknown editor {editor!r}. Use one of: ffmpeg, vegas, resolve, otio "
         f"(DIRECTOR_EDITOR)."
     )
 
@@ -69,8 +75,7 @@ def get_backend() -> EditorBackend:
         try:
             _BACKEND = create_backend()
         except ValueError as exc:
-            # Fall back to VEGAS rather than crash MCP startup on a typo;
-            # the first tool call still reports the error via a stub.
+            # Fall back to ffmpeg rather than crash MCP startup on a typo.
             _BACKEND = _UnknownBackend(str(exc))
     return _BACKEND
 
@@ -86,13 +91,21 @@ def list_editors() -> dict[str, Any]:
     current = editor_from_env()
     return {
         "ok": True,
-        "editor": current if current in {"vegas", "resolve", "otio"} else current,
+        "editor": current if current in {"ffmpeg", "vegas", "resolve", "otio"} else current,
         "editors": [
+            {
+                "id": "ffmpeg",
+                "label": "FFmpeg (headless)",
+                "live": False,
+                "default": False,
+                "note": "Cut, concat, mix, reframe, and render with no GUI NLE.",
+            },
             {
                 "id": "vegas",
                 "label": "MAGIX VEGAS Pro",
                 "live": True,
                 "default": True,
+                "note": "C# host inside VEGAS Pro via TCP 127.0.0.1:8752.",
             },
             {
                 "id": "resolve",
@@ -108,7 +121,7 @@ def list_editors() -> dict[str, Any]:
                 "live": False,
                 "default": False,
                 "studio_required": False,
-                "note": "Free-friendly export. Free Resolve imports .otio / .fcpxml.",
+                "note": "Plain timeline import/export, not a renderer.",
             },
         ],
         "env": "DIRECTOR_EDITOR",

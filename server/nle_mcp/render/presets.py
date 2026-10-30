@@ -8,7 +8,7 @@ RENDER_PRESETS: dict[str, dict[str, Any]] = {
         "name": "vertical",
         "width": 1080,
         "height": 1920,
-        "label": "Vertical 1080x1920 Short",
+        "label": "Vertical 1080x1920",
         "renderer_contains": "MP4",
         "template_contains": "",
         "prefer_template_substrings": [

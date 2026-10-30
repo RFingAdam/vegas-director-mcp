@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from vegas_director_mcp.backends import create_backend, editor_from_env, list_editors, reset_backend
-from vegas_director_mcp.backends.vegas import VegasBackend
-from vegas_director_mcp import tools
+from nle_mcp.backends import create_backend, editor_from_env, list_editors, reset_backend
+from nle_mcp.backends.vegas import VegasBackend
+from nle_mcp import tools
 
 
 def test_default_editor_is_vegas(monkeypatch):
@@ -12,7 +12,7 @@ def test_default_editor_is_vegas(monkeypatch):
     listed = list_editors()
     assert listed["ok"] is True
     ids = [e["id"] for e in listed["editors"]]
-    assert ids == ["vegas", "resolve", "otio"]
+    assert ids == ["ffmpeg", "vegas", "resolve", "otio"]
     resolve = next(e for e in listed["editors"] if e["id"] == "resolve")
     assert resolve["studio_required"] is True
 
@@ -24,6 +24,8 @@ def test_editor_aliases(monkeypatch):
     assert editor_from_env() == "otio"
     monkeypatch.setenv("DIRECTOR_EDITOR", "kdenlive")
     assert editor_from_env() == "otio"
+    monkeypatch.setenv("DIRECTOR_EDITOR", "ffmpeg")
+    assert editor_from_env() == "ffmpeg"
 
 
 def test_vegas_backend_passthrough(fake_session):
@@ -46,6 +48,16 @@ def test_vegas_markers_soft_fail(fake_session):
     result = tools.add_marker(1.0, "hook")
     assert result["ok"] is False
     assert result.get("unsupported") is True
+
+
+def test_legacy_import_alias():
+    import vegas_director_mcp
+    import nle_mcp
+    from vegas_director_mcp.backends import editor_from_env as alias_env
+    from nle_mcp.backends import editor_from_env as new_env
+
+    assert alias_env is new_env
+    assert vegas_director_mcp.ping is nle_mcp.ping
 
 
 def test_create_backend_resolve_does_not_touch_live_app():

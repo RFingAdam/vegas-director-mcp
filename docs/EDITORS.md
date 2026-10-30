@@ -1,19 +1,20 @@
 # Other editors — survey and next backend
 
-`vegas-director-mcp` now has an editor adapter. MCP tool names stay the same.
-`DIRECTOR_EDITOR` selects the backend:
+MCP tool names stay the same. `DIRECTOR_EDITOR` selects the backend:
 
 | Value | What | License of the *editor* | Live? |
 |---|---|---|---|
+| `ffmpeg` | Headless ffmpeg encode | None (ffmpeg) | No (headless) |
 | `vegas` (default) | MAGIX VEGAS Pro 22 C# host, TCP `127.0.0.1:8752` | VEGAS Pro license | Yes |
 | `resolve` | DaVinci Resolve **Studio** via `DaVinciResolveScript` | Studio ($295 perpetual) | Yes |
-| `otio` (aliases: `fcpxml`, `mlt`, `kdenlive`, `shotcut`) | In-memory timeline; `project.save` writes `.otio` / `.fcpxml` / `.mlt` | None | No |
+| `otio` (aliases: `fcpxml`, `mlt`, `kdenlive`, `shotcut`) | In-memory timeline I/O; `project.save` writes `.otio` / `.fcpxml` / `.mlt` | None | No |
 
-VEGAS behaviour is unchanged when `DIRECTOR_EDITOR` is unset.
+VEGAS behaviour is unchanged when `DIRECTOR_EDITOR` is unset. FFmpeg is
+the path that does not need a GUI NLE: [FFMPEG.md](FFMPEG.md).
 
 ## Resolve (implemented) — Studio only
 
-See [RESOLVE.md](RESOLVE.md) for setup, mapping, and Adam's Windows checklist.
+See [RESOLVE.md](RESOLVE.md) for setup and mapping.
 
 **Free Resolve cannot run this backend.** Blackmagic's 21.1 feature sheet
 lists `Scripting API: Studio`. In 21.1 they removed Python scripting from
@@ -28,9 +29,9 @@ Required for live control:
 Studio-only extras even on Studio: `CreateSubtitlesFromAudio`,
 `SmartReframe`, `SetVoiceIsolationState`.
 
-If Adam (or a viewer) only has free Resolve, use `DIRECTOR_EDITOR=otio`
-and import the file — that is the adoption path that does not ask them
-to buy Studio on day one.
+If you only have free Resolve, use `DIRECTOR_EDITOR=ffmpeg` to render, or
+`DIRECTOR_EDITOR=otio` and import the file — that path does not require
+Studio on day one.
 
 ## Why a second, free-friendly backend shipped in this PR
 
@@ -67,7 +68,7 @@ work, and `project.save` is the handoff.
   open a library and little else. No supported timeline mutation API.
 - **Cost of a live backend:** high / impossible. Cost of an export path:
   already covered (`DIRECTOR_EDITOR=otio` → `.fcpxml`).
-- **Adoption:** large on Mac, zero on Adam's Windows streaming box.
+- **Adoption:** large on Mac.
 - **Rank:** export-only; do not build a live FCP backend.
 
 ### Shotcut and Kdenlive (MLT XML)
@@ -96,23 +97,12 @@ work, and `project.save` is the handoff.
 
 ## Ranked recommendation — what to build next
 
-1. **Already done, free-friendly:** OTIO + FCPXML + MLT export (`otio`
-   backend). Use this whenever Studio is not available. Best adoption
-   increment per line of code.
-2. **Next live editor, if the goal is users:** **Premiere Pro UXP host**
+1. **Already done, headless:** FFmpeg backend (`ffmpeg`). Full cut / concat /
+   mix / reframe / render with no GUI NLE. [FFMPEG.md](FFMPEG.md).
+2. **Already done, interchange:** OTIO + FCPXML + MLT export (`otio`).
+   Use this when you need a file another editor can import, not a render.
+3. **Next live editor, if the goal is users:** **Premiere Pro UXP host**
    (in-app plugin + the same adapter). Biggest remaining audience. Same
    architecture as VEGAS, so the Python side stays thin. Not cheap.
-3. **Next cheap increment:** none that beat #1. Deepening the OTIO writer
-   (audio tracks in FCPXML, fade metadata → MLT filters) is more valuable
-   than a half-live Shotcut process.
 4. **Do not do:** CapCut drafts, a fake "live" FCP via GUI scripting, or
    anything that needs Studio-only Resolve features to be the default path.
-
-### Overlap with open PR #6
-
-PR #6 (extension `UndoBlock`, OneDrive Documents, render-template cap) is
-VEGAS-host-only. This work does **not** touch `host/*.cs`, `host/build.ps1`,
-`windows_paths.py`, `host_launch.py`, or `render/presets.py`. The only
-shared files are README / docs / `tools.py` (`_call` + new tools at the
-bottom) / `__init__.py` (new tools). `list_render_templates` /
-`render_with_preset` are left as on main so #6 can merge cleanly.

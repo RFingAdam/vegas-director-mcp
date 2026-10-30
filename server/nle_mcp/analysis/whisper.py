@@ -7,20 +7,25 @@ from typing import Any
 
 def _pick_device() -> tuple[str, str]:
     """Return (device, compute_type). Degrade: cuda → cpu int8."""
-    forced = (os.environ.get("VEGAS_WHISPER_DEVICE") or "").strip().lower()
+    forced = (
+        os.environ.get("NLE_WHISPER_DEVICE")
+        or os.environ.get("VEGAS_WHISPER_DEVICE")
+        or ""
+    ).strip().lower()
+    compute_env = os.environ.get("NLE_WHISPER_COMPUTE") or os.environ.get("VEGAS_WHISPER_COMPUTE")
     if forced in {"cpu", "cuda", "auto"}:
         if forced == "cpu":
-            return "cpu", os.environ.get("VEGAS_WHISPER_COMPUTE", "int8")
+            return "cpu", compute_env or "int8"
         if forced == "cuda":
-            return "cuda", os.environ.get("VEGAS_WHISPER_COMPUTE", "float16")
+            return "cuda", compute_env or "float16"
     try:
         import ctranslate2  # type: ignore
 
         if ctranslate2.get_cuda_device_count() > 0:  # type: ignore[attr-defined]
-            return "cuda", os.environ.get("VEGAS_WHISPER_COMPUTE", "float16")
+            return "cuda", compute_env or "float16"
     except Exception:
         pass
-    return "cpu", os.environ.get("VEGAS_WHISPER_COMPUTE", "int8")
+    return "cpu", compute_env or "int8"
 
 
 def transcribe_media(
@@ -30,8 +35,8 @@ def transcribe_media(
 ) -> dict[str, Any]:
     """Transcribe with faster-whisper if installed; otherwise soft-fail.
 
-    GPU is used when ctranslate2 reports a CUDA device. Missing extra is not
-    an error for the rest of the pipeline — call find_highlights without it.
+    GPU is used when ctranslate2 reports a CUDA device. Missing extra is a
+    soft failure; other analysis tools still work.
     """
     if not path:
         return {"ok": False, "error": "path is required"}
@@ -44,7 +49,7 @@ def transcribe_media(
             "ok": False,
             "error": (
                 "faster-whisper is not installed. "
-                "pip install 'vegas-director-mcp[whisper]' or pip install faster-whisper"
+                "pip install 'nle-mcp[whisper]' or pip install faster-whisper"
             ),
             "available": False,
         }

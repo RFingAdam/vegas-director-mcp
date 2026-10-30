@@ -1,13 +1,17 @@
 [project]
-name = "vegas-director-mcp"
-version = "0.1.0"
-description = "MCP server for AI-directed editing in VEGAS Pro, DaVinci Resolve Studio, or OTIO/FCPXML/MLT export."
+name = "nle-mcp"
+version = "0.2.0"
+description = "Editor-agnostic MCP bridge for AI-driven video editing (FFmpeg, VEGAS Pro, DaVinci Resolve)."
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "fastmcp>=0.4.0",
     "pydantic>=2.0",
 ]
+
+[project.scripts]
+nle-mcp = "nle_mcp:main"
+vegas-director-mcp = "nle_mcp:main"
 
 [project.optional-dependencies]
 windows = ["pywin32>=306"]
@@ -23,4 +27,4 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["vegas_director_mcp*"]
+include = ["nle_mcp*", "vegas_director_mcp*"]

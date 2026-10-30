@@ -9,7 +9,7 @@ The host in `host/VegasDirectorHost.cs` binds **TCP loopback only**:
 `127.0.0.1:8752`. Do not bind this off localhost. If the MCP server must
 run on another machine, use an SSH tunnel or VPN to that loopback port.
 
-The Python client (`server/vegas_director_mcp/host_client.py`) defaults
+The Python client (`server/nle_mcp/host_client.py`) defaults
 to TCP via `VEGAS_HOST_TRANSPORT` (default `tcp`). It still contains a
 Windows named-pipe path (`\\.\pipe\vegas-director`). The current host
 does not create that pipe; `VEGAS_HOST_TRANSPORT=pipe` will fail against
@@ -96,15 +96,16 @@ Almost every VEGAS-side failure is a JSON-RPC **result** with
 | `project.set_video` | `width?`, `height?`, `frame_rate?` | |
 
 MCP tool names are the Python functions in
-`server/vegas_director_mcp/__init__.py` (`get_project_state`,
+`server/nle_mcp/__init__.py` (`get_project_state`,
 `add_track`, `place_media`, `new_project`, …). They are thin wrappers
 over the RPC names above. See [API_COVERAGE.md](API_COVERAGE.md).
 
 Python-only (not host RPC): `probe_media`, `detect_scenes`, `analyze_audio`,
-`transcribe_media`, `generate_captions`, `burn_captions`, `find_highlights`,
+`transcribe_media`, `generate_captions`, `burn_captions`, `cut_media`,
+`concat_media`, `reframe_media`, `mix_audio`, `normalize_audio`,
 `verify_output`. Helpers `apply_crossfade` / `apply_ducking` /
-`apply_vertical_short` / `propose_edit` / `render_with_preset` compose the
-RPCs above.
+`render_with_preset` compose the RPCs above. The FFmpeg backend implements
+the same RPC names and encodes on `render.start`.
 
 ## Threading
 

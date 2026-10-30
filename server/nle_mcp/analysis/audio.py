@@ -1,4 +1,4 @@
-"""Windowed loudness / peak detection for reaction spikes. No VEGAS required."""
+"""Windowed loudness / peak detection. No NLE required."""
 from __future__ import annotations
 
 import audioop
@@ -10,7 +10,6 @@ from typing import Any
 from .ffmpeg_util import FfmpegError, run, which_ffmpeg
 from .probe import probe_media
 
-# Gameplay / squad shout heuristics (Wardogs, SwampBewdy, Ironhaven comms).
 _DEFAULT_WINDOW = 0.08
 
 
@@ -77,12 +76,11 @@ def _windows(pcm: bytes, sample_rate: int, window_seconds: float) -> list[dict[s
 def _classify(kind_hint: str | None, rel_peak: float, rel_rms: float) -> str:
     if kind_hint:
         return kind_hint
-    # Relative to the file's own median: very hot = kill/cash, mid = shout.
     if rel_peak >= 4.0 or rel_rms >= 3.5:
-        return "kill_cash"
+        return "peak"
     if rel_peak >= 2.2 or rel_rms >= 2.0:
-        return "squad_shout"
-    return "reaction"
+        return "loud"
+    return "rise"
 
 
 def analyze_audio(
@@ -91,7 +89,7 @@ def analyze_audio(
     spike_ratio: float = 2.2,
     max_spikes: int = 40,
 ) -> dict[str, Any]:
-    """Find loudness peaks (reaction / kill-cash / squad shout candidates)."""
+    """Find loudness peaks relative to the file's own median RMS/peak."""
     if not path:
         return {"ok": False, "error": "path is required"}
     if not os.path.isfile(path):

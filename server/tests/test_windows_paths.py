@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vegas_director_mcp import host_launch
-from vegas_director_mcp import windows_paths
+from nle_mcp import host_launch
+from nle_mcp import windows_paths
 
 
 def test_my_documents_non_windows_fallback(monkeypatch, tmp_path):

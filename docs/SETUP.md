@@ -4,8 +4,9 @@ You need a licensed VEGAS Pro 22 install. The MCP server talks to a C#
 host that runs **inside** VEGAS over TCP `127.0.0.1:8752`.
 
 Host tools need VEGAS. `probe_media`, `detect_scenes`, `analyze_audio`,
-`transcribe_media`, `generate_captions`, `find_highlights`, and
-`verify_output` are ffmpeg/Python and work with VEGAS closed.
+`transcribe_media`, `generate_captions`, `cut_media`, `concat_media`,
+`reframe_media`, and `verify_output` are ffmpeg/Python and work with VEGAS
+closed. Headless editing with no VEGAS: [FFMPEG.md](FFMPEG.md).
 
 ## 1. Script host
 
@@ -105,10 +106,11 @@ pip install -e .
 set VEGAS_HOST_TRANSPORT=tcp
 set VEGAS_HOST_ADDRESS=127.0.0.1
 set VEGAS_HOST_PORT=8752
-python -m vegas_director_mcp
+python -m nle_mcp
 ```
 
-`pip install -e .` makes `python -m vegas_director_mcp` work even when
+`python -m vegas_director_mcp` is a backward-compatible alias.
+`pip install -e .` makes `python -m nle_mcp` work even when
 the MCP client does not set a working directory. `requirements.txt`
 matches `pyproject.toml` plus `pywin32` on Windows (only needed if you
 force named-pipe transport, which the current host does not serve).
@@ -136,9 +138,9 @@ Cursor / Claude Desktop-style config. Use the venv interpreter and the
 ```json
 {
   "mcpServers": {
-    "vegas-director": {
+    "nle-mcp": {
       "command": "C:\\path\\to\\vegas-director-mcp\\server\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "vegas_director_mcp"],
+      "args": ["-m", "nle_mcp"],
       "cwd": "C:\\path\\to\\vegas-director-mcp\\server",
       "env": {
         "VEGAS_HOST_TRANSPORT": "tcp",
@@ -170,7 +172,7 @@ dialog still open):
 cd <clone>\server
 .venv\Scripts\activate
 set VEGAS_HOST_TRANSPORT=tcp
-python -c "from vegas_director_mcp.tools import ping, host_info, get_project_state; print(ping()); print(host_info()); print(get_project_state())"
+python -c "from nle_mcp.tools import ping, host_info, get_project_state; print(ping()); print(host_info()); print(get_project_state())"
 ```
 
 Success looks like `ok: true` plus `mode` (`extension` or `script`) plus
@@ -192,7 +194,8 @@ faster-whisper uses CUDA when ctranslate2 reports a GPU, otherwise CPU
 int8. Missing extra is a soft `{ok:false}` — the rest of the pipeline still
 runs.
 
-Default Short / long-form workflow: [skills/vegas-director/SKILL.md](../skills/vegas-director/SKILL.md).
+Generic tool workflow: [skills/nle-mcp/SKILL.md](../skills/nle-mcp/SKILL.md).
+Old name notes: [MIGRATION.md](MIGRATION.md).
 
 `ffmpeg` is not required for the host-only smoke test above.
 
@@ -204,8 +207,8 @@ back to `.dll`. Re-run `host\build.ps1` (confirm the printed Documents
 path is the OneDrive folder if this PC redirects Documents). Start VEGAS
 again.
 
-Extension-mode **writes** (new project, add track, set video, apply a
-Short) need this rebuilt DLL: VEGAS does not wrap Application Extension
+Extension-mode **writes** (new project, add track, set video, place an
+event) need this rebuilt DLL: VEGAS does not wrap Application Extension
 edits in an undo transaction the way it wraps *Tools > Scripting*, so
 the host now creates an `UndoBlock` on the UI thread. Reads already
 worked; old DLLs still fail writes with `E_UNEXPECTED`.

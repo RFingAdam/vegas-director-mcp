@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from vegas_director_mcp import tools
-from vegas_director_mcp.render.presets import match_preset
-from vegas_director_mcp.render.sidecar import verify_output, write_sidecar
+from nle_mcp import tools
+from nle_mcp.render.presets import match_preset
+from nle_mcp.render.sidecar import verify_output, write_sidecar
 
 
 def test_ping_and_host_info(fake_session):
@@ -54,7 +54,7 @@ def test_crossfade_moves_and_fades(fake_session):
         raise AssertionError(method)
 
     host, _ = fake_session(handler)
-    from vegas_director_mcp.edit.helpers import apply_crossfade
+    from nle_mcp.edit.helpers import apply_crossfade
 
     result = apply_crossfade(0, 0, 1, seconds=0.5)
     assert result["ok"] is True
@@ -80,67 +80,11 @@ def test_ducking_writes_volume_points(fake_session):
         raise AssertionError(method)
 
     fake_session(handler)
-    from vegas_director_mcp.edit.helpers import apply_ducking
+    from nle_mcp.edit.helpers import apply_ducking
 
     result = apply_ducking(0, 1, reduction_db=-9)
     assert result["ok"] is True
     assert result["voice_events"] == 1
-
-
-def test_vertical_short_template(fake_session):
-    def handler(method, params):
-        if method == "project.set_video":
-            return {"ok": True, "width": 1080, "height": 1920}
-        if method == "track.add":
-            name = params.get("name") or ""
-            idx = 0 if "Caption" in name else 1
-            return {"ok": True, "track_index": idx, "type": params.get("type")}
-        if method in {"event.add_video", "event.trim", "event.set_motion", "event.set_fades", "event.add_title"}:
-            return {"ok": True}
-        raise AssertionError(method)
-
-    fake_session(handler)
-    from vegas_director_mcp.edit.shorts import apply_vertical_short
-
-    result = apply_vertical_short(
-        r"D:\media\wardogs.mp4",
-        10.0,
-        34.0,
-        caption_cues=[{"start_seconds": 10.2, "end_seconds": 12.0, "text": "DOWN"}],
-    )
-    assert result["ok"] is True
-    assert result["template"] == "vertical_short"
-    assert result["zoom_count"] == 2
-    assert result["edit_meta"]["caption_style"] == "shorts"
-    assert result["motion"]["ok"] is True
-
-
-def test_propose_edit_uses_highlights(fake_session, monkeypatch, spike_clip):
-    def handler(method, params):
-        if method == "project.set_video":
-            return {"ok": True, "width": 1080, "height": 1920}
-        if method == "track.add":
-            return {"ok": True, "track_index": 0, "type": "video"}
-        if method == "event.add_video":
-            return {"ok": True, "event_index": 0}
-        if method in {"event.trim", "event.set_motion", "event.set_fades"}:
-            return {"ok": True}
-        if method == "project.get_state":
-            return {
-                "ok": True,
-                "events": [
-                    {"track_index": 0, "event_index": 0, "start_seconds": 0.0, "length_seconds": 2.5},
-                ],
-            }
-        raise AssertionError(method)
-
-    fake_session(handler)
-    from vegas_director_mcp.edit.propose import propose_edit
-
-    result = propose_edit(str(spike_clip), vertical_short=True)
-    assert result["ok"] is True
-    assert result["in_seconds"] < result["out_seconds"]
-    assert result["steps"]
 
 
 def test_render_with_preset_async_verify(fake_session, color_clip, tmp_path):
@@ -181,7 +125,7 @@ def test_render_with_preset_async_verify(fake_session, color_clip, tmp_path):
     result = tools.render_with_preset(
         str(out),
         "vertical",
-        edit_meta={"length": 2.2, "hook_start_time": 0.1, "caption_style": "shorts", "zoom_count": 2, "music": False, "template": "vertical_short"},
+        edit_meta={"length": 2.2, "in_seconds": 0.1, "caption_style": "default", "zoom_count": 2, "music": False, "template": "timeline"},
         wait=True,
     )
     assert result["started"]["job_id"] == "abc123"
@@ -202,7 +146,7 @@ def test_match_preset_picks_vertical():
 
 
 def test_match_preset_finds_vertical_after_400_avi_templates():
-    """Adam's install: 503 templates; MAGIX AVC/AAC MP4 sits after the old 400 cap."""
+    """Some installs list 500+ templates; MAGIX AVC/AAC MP4 sits after the old 400 cap."""
     templates = [
         {"renderer": "Video for Windows", "template": f"avi-{i}", "width": 1920, "height": 1080}
         for i in range(450)
@@ -337,20 +281,20 @@ def test_sidecar_schema(tmp_path, color_clip):
         {
             "length": 27.0,
             "hook_start_time": 142.5,
-            "caption_style": "shorts",
+            "caption_style": "default",
             "zoom_count": 2,
             "music": True,
-            "template": "vertical_short",
+            "template": "timeline",
         },
     )
     assert payload["ok"] is True
     edit = payload["edit"]
     assert edit["length"] == 27.0
     assert edit["hook_start_time"] == 142.5
-    assert edit["caption_style"] == "shorts"
+    assert edit["caption_style"] == "default"
     assert edit["zoom_count"] == 2
     assert edit["music"] is True
-    assert edit["template"] == "vertical_short"
+    assert edit["template"] == "timeline"
     verify = verify_output(str(dest), expect_audio=True)
     assert verify["ok"] is True
     assert verify["probe"]["has_audio"] is True

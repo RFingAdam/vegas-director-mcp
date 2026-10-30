@@ -36,8 +36,9 @@ an `UndoBlock` on the UI thread.
 | Render | `render.status` | ✅ job_id / state / percent (progress events, no UI-marshal wait) |
 | Project | `project.set_video` | ✅ width / height / frame_rate |
 | Host start | Application Extension / Script Menu / `ensure_host` | ✅ live TCP, `/RUNSCRIPT`, or `/CMDMODULE` path; tools set `used_mode` |
-| Analysis (no VEGAS) | `probe_media`, `detect_scenes`, `analyze_audio`, `transcribe_media`, `generate_captions`, `burn_captions`, `find_highlights` | ✅ |
-| Edit helpers | `apply_crossfade`, `apply_ducking`, `apply_vertical_short`, `propose_edit` | ✅ |
+| Analysis (no NLE) | `probe_media`, `detect_scenes`, `analyze_audio`, `transcribe_media`, `generate_captions`, `burn_captions` | ✅ |
+| File-level ffmpeg | `cut_media`, `concat_media`, `reframe_media`, `mix_audio`, `normalize_audio` | ✅ |
+| Edit helpers | `apply_crossfade`, `apply_ducking` | ✅ |
 | Delivery | `render_with_preset`, `verify_output`, sidecar `<output>.edit.json` | ✅ (preset matching walks the full template list; MAGIX AVC/AAC aliases) |
 
 Soft failures return JSON-RPC **result** `{ "ok": false, "error": "..." }` (never crash VEGAS).
@@ -73,10 +74,10 @@ restart VEGAS if you use the extension, or re-run
 Same MCP names, different backend (`DIRECTOR_EDITOR`). VEGAS coverage
 above is unchanged.
 
+- **FFmpeg** — [docs/FFMPEG.md](FFMPEG.md) (headless render).
 - **Resolve Studio 21.1+** — [docs/RESOLVE.md](RESOLVE.md) (mapping table,
-  Studio vs free, Windows checklist). Free Resolve has no Scripting API
-  since 21.1.
-- **OTIO / FCPXML / MLT** — in-memory export; see [docs/EDITORS.md](EDITORS.md).
+  Studio vs free). Free Resolve has no Scripting API since 21.1.
+- **OTIO / FCPXML / MLT** — in-memory import/export; see [docs/EDITORS.md](EDITORS.md).
 
 ## Sample: `media.replace`
 
@@ -86,8 +87,8 @@ above is unchanged.
   "id": 2,
   "method": "media.replace",
   "params": {
-    "old_path": "D:\\captures\\wardogs.mkv",
-    "new_path": "D:\\captures\\wardogs.mp4"
+    "old_path": "D:\\captures\\source.mkv",
+    "new_path": "D:\\captures\\source.mp4"
   }
 }
 ```
