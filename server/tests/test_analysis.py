@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from cutrelay.analysis.audio import analyze_audio
-from cutrelay.analysis.captions import generate_captions
-from cutrelay.analysis.probe import probe_media
-from cutrelay.analysis.scenes import detect_scenes
-from cutrelay.analysis.whisper import transcribe_media
-from cutrelay import find_highlights
+from rushcut.analysis.audio import analyze_audio
+from rushcut.analysis.captions import generate_captions
+from rushcut.analysis.probe import probe_media
+from rushcut.analysis.scenes import detect_scenes
+from rushcut.analysis.whisper import transcribe_media
+from rushcut import find_highlights
 
 
 def test_probe_color_clip(color_clip):

@@ -106,13 +106,13 @@ pip install -e .
 set VEGAS_HOST_TRANSPORT=tcp
 set VEGAS_HOST_ADDRESS=127.0.0.1
 set VEGAS_HOST_PORT=8752
-python -m cutrelay
+python -m rushcut
 ```
 
 `python -m vegas_director_mcp` and `python -m nle_mcp` are deprecated aliases
 (kept for one release; they warn on stderr). Re-run `pip install -e .` after
-pulling the rename so the `cutrelay` package is registered.
-`pip install -e .` makes `python -m cutrelay` work even when
+pulling the rename so the `rushcut` package is registered.
+`pip install -e .` makes `python -m rushcut` work even when
 the MCP client does not set a working directory. `requirements.txt`
 matches `pyproject.toml` plus `pywin32` on Windows (only needed if you
 force named-pipe transport, which the current host does not serve).
@@ -140,10 +140,10 @@ Cursor / Claude Desktop-style config. Use the venv interpreter and the
 ```json
 {
   "mcpServers": {
-    "cutrelay-mcp": {
-      "command": "C:\\path\\to\\vegas-director-mcp\\server\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "cutrelay"],
-      "cwd": "C:\\path\\to\\vegas-director-mcp\\server",
+    "rushcut-mcp": {
+      "command": "C:\\path\\to\\rushcut\\server\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "rushcut"],
+      "cwd": "C:\\path\\to\\rushcut\\server",
       "env": {
         "VEGAS_HOST_TRANSPORT": "tcp",
         "VEGAS_HOST_ADDRESS": "127.0.0.1",
@@ -154,7 +154,7 @@ Cursor / Claude Desktop-style config. Use the venv interpreter and the
 }
 ```
 
-Replace `C:\\path\\to\\vegas-director-mcp` with your clone path.
+Replace `C:\\path\\to\\rushcut` with your clone path.
 
 Or, from the repo root after the venv exists:
 
@@ -174,7 +174,7 @@ dialog still open):
 cd <clone>\server
 .venv\Scripts\activate
 set VEGAS_HOST_TRANSPORT=tcp
-python -c "from cutrelay.tools import ping, host_info, get_project_state; print(ping()); print(host_info()); print(get_project_state())"
+python -c "from rushcut.tools import ping, host_info, get_project_state; print(ping()); print(host_info()); print(get_project_state())"
 ```
 
 Success looks like `ok: true` plus `mode` (`extension` or `script`) plus
@@ -196,7 +196,7 @@ faster-whisper uses CUDA when ctranslate2 reports a GPU, otherwise CPU
 int8. Missing extra is a soft `{ok:false}` — the rest of the pipeline still
 runs.
 
-Generic tool workflow: [skills/cutrelay/SKILL.md](../skills/cutrelay/SKILL.md).
+Generic tool workflow: [skills/rushcut/SKILL.md](../skills/rushcut/SKILL.md).
 Old name notes: [MIGRATION.md](MIGRATION.md).
 
 `ffmpeg` is not required for the host-only smoke test above.

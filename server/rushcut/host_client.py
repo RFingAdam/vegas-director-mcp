@@ -1,4 +1,4 @@
-"""Client for the CutRelay MCP <-> VEGAS script host RPC channel.
+"""Client for the Rushcut MCP <-> VEGAS script host RPC channel.
 
 Two transports are supported:
   - "tcp": loopback TCP (default). The current host listens here.

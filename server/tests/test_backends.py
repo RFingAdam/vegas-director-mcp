@@ -6,14 +6,14 @@ import warnings
 
 import pytest
 
-from cutrelay import tools
-from cutrelay.backends import (
+from rushcut import tools
+from rushcut.backends import (
     create_backend,
     editor_from_env,
     list_editors,
     reset_backend,
 )
-from cutrelay.backends.vegas import VegasBackend
+from rushcut.backends.vegas import VegasBackend
 
 
 def test_default_editor_is_vegas(monkeypatch):
@@ -61,10 +61,10 @@ def test_vegas_markers_soft_fail(fake_session):
     assert result.get("unsupported") is True
 
 
-@pytest.mark.parametrize("alias", ["vegas_director_mcp", "nle_mcp"])
+@pytest.mark.parametrize("alias", ["cutrelay", "vegas_director_mcp", "nle_mcp"])
 def test_legacy_import_alias(alias):
-    import cutrelay
-    from cutrelay.backends import editor_from_env as new_env
+    import rushcut
+    from rushcut.backends import editor_from_env as new_env
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
@@ -73,31 +73,31 @@ def test_legacy_import_alias(alias):
         alias_tools = importlib.import_module(f"{alias}.tools")
 
     assert alias_env is new_env
-    assert alias_tools is cutrelay.tools
-    assert legacy.ping is cutrelay.ping
-    assert legacy.main is cutrelay.main
+    assert alias_tools is rushcut.tools
+    assert legacy.ping is rushcut.ping
+    assert legacy.main is rushcut.main
 
 
-@pytest.mark.parametrize("alias", ["vegas_director_mcp", "nle_mcp"])
+@pytest.mark.parametrize("alias", ["cutrelay", "vegas_director_mcp", "nle_mcp"])
 def test_legacy_import_alias_warns(alias):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         legacy = importlib.import_module(alias)
-    with pytest.warns(DeprecationWarning, match="cutrelay"):
+    with pytest.warns(DeprecationWarning, match="rushcut"):
         importlib.reload(legacy)
 
 
-@pytest.mark.parametrize("alias", ["vegas_director_mcp", "nle_mcp"])
+@pytest.mark.parametrize("alias", ["cutrelay", "vegas_director_mcp", "nle_mcp"])
 def test_legacy_python_m_entry_point(alias):
     spec = importlib.util.find_spec(f"{alias}.__main__")
     assert spec is not None
 
 
 def test_server_name():
-    import cutrelay
+    import rushcut
 
-    assert cutrelay.SERVER_NAME == "CutRelay MCP"
-    assert cutrelay.mcp.name == "CutRelay MCP"
+    assert rushcut.SERVER_NAME == "Rushcut MCP"
+    assert rushcut.mcp.name == "Rushcut MCP"
 
 
 def test_create_backend_resolve_does_not_touch_live_app():
