@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from nle_mcp.backends import reset_backend
-from nle_mcp.host_client import VegasHostConfig
-from nle_mcp.session import Session, reset_session
+from cutrelay.backends import reset_backend
+from cutrelay.host_client import VegasHostConfig
+from cutrelay.session import Session, reset_session
 
 
 @pytest.fixture(scope="session")
 def ffmpeg_bin() -> str:
-    from nle_mcp.analysis.ffmpeg_util import which_ffmpeg
+    from cutrelay.analysis.ffmpeg_util import which_ffmpeg
 
     return which_ffmpeg("ffmpeg")
 

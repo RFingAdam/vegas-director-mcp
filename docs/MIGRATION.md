@@ -1,31 +1,49 @@
-# Migration from vegas-director-mcp
+# Migration to CutRelay MCP (from vegas-director-mcp / nle-mcp)
 
-This public repo is now an editor-agnostic MCP bridge. The Python package
-and MCP server name are **nle-mcp**. The GitHub repository name is unchanged.
+This public repo is an editor-agnostic MCP bridge, now named **CutRelay MCP**.
+The Python project is **cutrelay-mcp**, the import package is **cutrelay**, and
+the MCP server name is **"CutRelay MCP"**. The GitHub repository name is
+unchanged for now.
 
 ## Package and entry points
 
 | Old | New |
 |---|---|
-| PyPI / project name `vegas-director-mcp` | `nle-mcp` |
-| `import vegas_director_mcp` | `import nle_mcp` |
-| `python -m vegas_director_mcp` | `python -m nle_mcp` |
-| FastMCP name `vegas-director-mcp` | `nle-mcp` |
-| `pip install 'vegas-director-mcp[whisper]'` | `pip install 'nle-mcp[whisper]'` |
+| Project name `vegas-director-mcp` / `nle-mcp` | `cutrelay-mcp` |
+| `import vegas_director_mcp` / `import nle_mcp` | `import cutrelay` |
+| `python -m vegas_director_mcp` / `python -m nle_mcp` | `python -m cutrelay` |
+| Console script `vegas-director-mcp` / `nle-mcp` | `cutrelay-mcp` |
+| FastMCP name `vegas-director-mcp` / `nle-mcp` | `CutRelay MCP` |
+| `pip install 'vegas-director-mcp[whisper]'` | `pip install 'cutrelay-mcp[whisper]'` |
+| `skills/nle-mcp/SKILL.md` | `skills/cutrelay/SKILL.md` |
 
-Cheap aliases that still work:
+Compatibility kept for one release (the Python aliases emit a
+`DeprecationWarning` on import, on stderr):
 
-- `import vegas_director_mcp` (re-exports `nle_mcp`, including submodules)
-- `python -m vegas_director_mcp`
-- console script `vegas-director-mcp`
+- `import vegas_director_mcp` and `import nle_mcp` (re-export `cutrelay`,
+  including submodules such as `vegas_director_mcp.tools`)
+- `python -m vegas_director_mcp` and `python -m nle_mcp`
+- console scripts `vegas-director-mcp` and `nle-mcp`
+- every MCP tool name (unchanged)
 - env `VEGAS_DIRECTOR_EDITOR` (same as `DIRECTOR_EDITOR`)
 - `VEGAS_WHISPER_DEVICE` / `VEGAS_WHISPER_COMPUTE` (also `NLE_WHISPER_*`)
-- MCP tool names for timeline, analysis, and render helpers
-- VEGAS host token path `%LOCALAPPDATA%\vegas-director-mcp\token` (the C# host still writes there)
 
-Claude Desktop / Cursor config: change `"vegas-director"` to `"nle-mcp"` and
-`args` to `["-m", "nle_mcp"]` when you are ready. The old `-m vegas_director_mcp`
-still launches the server.
+Not renamed (on-disk / wire compatibility with installed VEGAS hosts):
+
+- VEGAS host token and log folder `%LOCALAPPDATA%\vegas-director-mcp\`
+- `VegasDirector.dll`, `VegasDirectorHost.cs`, `VegasDirectorExtension.cs`,
+  the *Vegas Director Host* view, and the `Vegas Director:` undo labels
+- the `vegas-director` pipe name and the `"host": "vegas-director"` ping field
+
+## MCP client config
+
+The MCP server name is display-only; clients key servers on whatever label you
+put in your config, so an existing `"vegas-director"` entry keeps working as-is.
+After pulling, run `pip install -e .` in `server\.venv` once so the new
+`cutrelay` package is registered. To switch, set `args` to `["-m", "cutrelay"]`
+(and optionally rename the key to `"cutrelay"`), then restart Claude Desktop,
+Grok, Cursor, or whichever client you use. `scripts/register_claude.py` writes
+a `"cutrelay-mcp"` entry and leaves an existing `"vegas-director"` entry alone.
 
 Default `DIRECTOR_EDITOR` is still `vegas` so existing VEGAS installs keep
 working. Set `DIRECTOR_EDITOR=ffmpeg` for headless editing.

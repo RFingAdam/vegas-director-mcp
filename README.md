@@ -1,7 +1,9 @@
-# nle-mcp
+# CutRelay MCP: editor-agnostic AI video editing over MCP
 
-An MCP (Model Context Protocol) server that puts a model in the editor's
-chair. The same tools (timeline, clips, markers, FX, render) can target
+**FFmpeg-first; VEGAS Pro, DaVinci Resolve, OTIO/FCPXML/MLT backends.**
+
+CutRelay MCP is an MCP (Model Context Protocol) server that puts a model in
+the editor's chair. The same tools (timeline, clips, markers, FX, render) can target
 more than one backend:
 
 | `DIRECTOR_EDITOR` | Backend | Needs |
@@ -11,10 +13,15 @@ more than one backend:
 | `resolve` | DaVinci Resolve via `DaVinciResolveScript` | **Resolve Studio 21.1+**, External scripting = Local. Free Resolve has **no** Scripting API since 21.1. |
 | `otio` | In-memory OTIO / FCPXML / MLT import and export | Nothing. Timeline I/O only — not a renderer. |
 
-The GitHub repository is still named `vegas-director-mcp`. The Python
-package, MCP server name, and docs use **nle-mcp**. Proposed public names
-are in the pull request that introduced this layout. See
-[docs/MIGRATION.md](docs/MIGRATION.md) if you used the old package name.
+> **Renamed from vegas-director-mcp.** This project was previously published as
+> `vegas-director-mcp` (and briefly `nle-mcp`). The Python package is now
+> `cutrelay-mcp`, the import is `cutrelay`, and the MCP server name is
+> "CutRelay MCP". The GitHub repository keeps its old name for now. The old
+> `vegas_director_mcp` / `nle_mcp` imports, `python -m vegas_director_mcp`, and the
+> `vegas-director-mcp` console script still work for one release (with a
+> `DeprecationWarning`). MCP tool names are unchanged. See
+> [Updating your MCP client config](#updating-your-mcp-client-config) and
+> [docs/MIGRATION.md](docs/MIGRATION.md).
 
 **Not affiliated with MAGIX or Blackmagic Design.** See [NOTICE](NOTICE).
 
@@ -109,7 +116,7 @@ Depends on `DIRECTOR_EDITOR` (default `vegas`, for existing installs):
 
 `ffmpeg` / `ffprobe` are required for media grounding, caption burn-in,
 the FFmpeg backend, and render verification. Optional:
-`pip install 'nle-mcp[whisper]'`.
+`pip install 'cutrelay-mcp[whisper]'`.
 
 ## Quick start
 
@@ -124,10 +131,46 @@ py -3.11 -m venv .venv
 pip install -r requirements.txt
 pip install -e .
 set DIRECTOR_EDITOR=ffmpeg
-python -m nle_mcp
+python -m cutrelay
 ```
 
-`python -m vegas_director_mcp` is a backward-compatible alias.
+`python -m vegas_director_mcp` and `python -m nle_mcp` are deprecated aliases
+that still start the same server.
+
+## Updating your MCP client config
+
+Tool names did not change, so existing prompts and agents keep working. The
+server key in your client config is your own label; the only thing that has to
+point somewhere real is the command.
+
+**Nothing breaks if you do nothing.** A config that runs
+`server\.venv\Scripts\python.exe -m vegas_director_mcp` keeps working; the
+alias prints a `DeprecationWarning` to stderr (not to the MCP stdio stream).
+After pulling this change, re-run `pip install -e .` in `server\.venv` so the
+new `cutrelay` package and `cutrelay-mcp` console script are registered.
+
+When you are ready to switch, Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`),
+Grok, Cursor, or any other stdio MCP client:
+
+```json
+{
+  "mcpServers": {
+    "cutrelay": {
+      "command": "C:\\path\\to\\vegas-director-mcp\\server\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "cutrelay"],
+      "cwd": "C:\\path\\to\\vegas-director-mcp\\server",
+      "env": { "DIRECTOR_EDITOR": "vegas" }
+    }
+  }
+}
+```
+
+i.e. change `"args": ["-m", "vegas_director_mcp"]` to `["-m", "cutrelay"]`
+(or use the `cutrelay-mcp` console script as `command`), optionally rename the
+key from `"vegas-director"` to `"cutrelay"`, then restart the client. Clients
+that show the server name will now show "CutRelay MCP" instead of
+"vegas-director-mcp" / "nle-mcp". `scripts/register_claude.py` writes the new
+entry and keeps an existing `"vegas-director"` entry untouched.
 
 ## Layout
 
@@ -136,10 +179,10 @@ python -m nle_mcp
 | `host/VegasDirectorHost.cs` | In-process VEGAS script / TCP host |
 | `host/VegasDirectorExtension.cs` | `ICustomCommandModule` auto-start wrapper |
 | `host/build.ps1` | Compile + install the extension DLL |
-| `server/nle_mcp/` | FastMCP server + backends + JSON-RPC client |
-| `server/vegas_director_mcp/` | Import / `python -m` alias for `nle_mcp` |
+| `server/cutrelay/` | FastMCP server + backends + JSON-RPC client |
+| `server/vegas_director_mcp/`, `server/nle_mcp/` | Deprecated import / `python -m` aliases for `cutrelay` (one release) |
 | `scripts/register_claude.py` | Write Claude Desktop MCP config from this checkout |
-| `skills/nle-mcp/SKILL.md` | Generic example of how to drive the tools |
+| `skills/cutrelay/SKILL.md` | Generic example of how to drive the tools |
 | `server/tests/` | Mocked hosts + synthetic ffmpeg fixtures |
 | `docs/` | Protocol, API coverage, setup, ffmpeg, roadmap, editors, Resolve, licensing, migration |
 

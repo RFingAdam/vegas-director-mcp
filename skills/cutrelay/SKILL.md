@@ -1,9 +1,9 @@
 ---
-name: nle-mcp
+name: cutrelay-mcp
 description: Drive an editor-agnostic MCP video-edit bridge (FFmpeg, VEGAS Pro, or DaVinci Resolve Studio). Use when probing media, building a timeline, trimming, mixing audio, burning captions, reframing, or rendering.
 ---
 
-# nle-mcp
+# cutrelay-mcp
 
 MCP tools talk to whichever backend `DIRECTOR_EDITOR` selects (`ffmpeg`,
 `vegas`, `resolve`, `otio`). Analysis tools never need an NLE.

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from nle_mcp import tools
-from nle_mcp.render.presets import match_preset
-from nle_mcp.render.sidecar import verify_output, write_sidecar
+from cutrelay import tools
+from cutrelay.render.presets import match_preset
+from cutrelay.render.sidecar import verify_output, write_sidecar
 
 
 def test_ping_and_host_info(fake_session):
@@ -54,7 +54,7 @@ def test_crossfade_moves_and_fades(fake_session):
         raise AssertionError(method)
 
     host, _ = fake_session(handler)
-    from nle_mcp.edit.helpers import apply_crossfade
+    from cutrelay.edit.helpers import apply_crossfade
 
     result = apply_crossfade(0, 0, 1, seconds=0.5)
     assert result["ok"] is True
@@ -80,7 +80,7 @@ def test_ducking_writes_volume_points(fake_session):
         raise AssertionError(method)
 
     fake_session(handler)
-    from nle_mcp.edit.helpers import apply_ducking
+    from cutrelay.edit.helpers import apply_ducking
 
     result = apply_ducking(0, 1, reduction_db=-9)
     assert result["ok"] is True

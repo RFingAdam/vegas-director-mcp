@@ -9,7 +9,7 @@ The host in `host/VegasDirectorHost.cs` binds **TCP loopback only**:
 `127.0.0.1:8752`. Do not bind this off localhost. If the MCP server must
 run on another machine, use an SSH tunnel or VPN to that loopback port.
 
-The Python client (`server/nle_mcp/host_client.py`) defaults
+The Python client (`server/cutrelay/host_client.py`) defaults
 to TCP via `VEGAS_HOST_TRANSPORT` (default `tcp`). It still contains a
 Windows named-pipe path (`\\.\pipe\vegas-director`). The current host
 does not create that pipe; `VEGAS_HOST_TRANSPORT=pipe` will fail against
@@ -96,7 +96,7 @@ Almost every VEGAS-side failure is a JSON-RPC **result** with
 | `project.set_video` | `width?`, `height?`, `frame_rate?` | |
 
 MCP tool names are the Python functions in
-`server/nle_mcp/__init__.py` (`get_project_state`,
+`server/cutrelay/__init__.py` (`get_project_state`,
 `add_track`, `place_media`, `new_project`, …). They are thin wrappers
 over the RPC names above. See [API_COVERAGE.md](API_COVERAGE.md).
 

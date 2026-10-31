@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from nle_mcp.backends import reset_backend
-from nle_mcp.backends.otio import OtioBackend
-from nle_mcp import tools
+from cutrelay.backends import reset_backend
+from cutrelay.backends.otio import OtioBackend
+from cutrelay import tools
 
 
 def _otio() -> OtioBackend:
@@ -60,7 +60,7 @@ def test_helpers_work_on_otio_backend():
     tools.add_track("video", "V1")
     tools.add_video_event(0, r"D:\a.mp4", 0.0, 4.0)
     tools.add_video_event(0, r"D:\b.mp4", 4.0, 4.0)
-    from nle_mcp.edit.helpers import apply_crossfade
+    from cutrelay.edit.helpers import apply_crossfade
 
     result = apply_crossfade(0, 0, 1, seconds=0.5)
     assert result["ok"] is True

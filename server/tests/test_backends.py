@@ -1,8 +1,19 @@
 from __future__ import annotations
 
-from nle_mcp.backends import create_backend, editor_from_env, list_editors, reset_backend
-from nle_mcp.backends.vegas import VegasBackend
-from nle_mcp import tools
+import importlib
+import importlib.util
+import warnings
+
+import pytest
+
+from cutrelay import tools
+from cutrelay.backends import (
+    create_backend,
+    editor_from_env,
+    list_editors,
+    reset_backend,
+)
+from cutrelay.backends.vegas import VegasBackend
 
 
 def test_default_editor_is_vegas(monkeypatch):
@@ -50,14 +61,43 @@ def test_vegas_markers_soft_fail(fake_session):
     assert result.get("unsupported") is True
 
 
-def test_legacy_import_alias():
-    import vegas_director_mcp
-    import nle_mcp
-    from vegas_director_mcp.backends import editor_from_env as alias_env
-    from nle_mcp.backends import editor_from_env as new_env
+@pytest.mark.parametrize("alias", ["vegas_director_mcp", "nle_mcp"])
+def test_legacy_import_alias(alias):
+    import cutrelay
+    from cutrelay.backends import editor_from_env as new_env
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        legacy = importlib.import_module(alias)
+        alias_env = importlib.import_module(f"{alias}.backends").editor_from_env
+        alias_tools = importlib.import_module(f"{alias}.tools")
 
     assert alias_env is new_env
-    assert vegas_director_mcp.ping is nle_mcp.ping
+    assert alias_tools is cutrelay.tools
+    assert legacy.ping is cutrelay.ping
+    assert legacy.main is cutrelay.main
+
+
+@pytest.mark.parametrize("alias", ["vegas_director_mcp", "nle_mcp"])
+def test_legacy_import_alias_warns(alias):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        legacy = importlib.import_module(alias)
+    with pytest.warns(DeprecationWarning, match="cutrelay"):
+        importlib.reload(legacy)
+
+
+@pytest.mark.parametrize("alias", ["vegas_director_mcp", "nle_mcp"])
+def test_legacy_python_m_entry_point(alias):
+    spec = importlib.util.find_spec(f"{alias}.__main__")
+    assert spec is not None
+
+
+def test_server_name():
+    import cutrelay
+
+    assert cutrelay.SERVER_NAME == "CutRelay MCP"
+    assert cutrelay.mcp.name == "CutRelay MCP"
 
 
 def test_create_backend_resolve_does_not_touch_live_app():
