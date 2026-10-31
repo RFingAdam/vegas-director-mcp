@@ -63,7 +63,7 @@ Same MCP tools pick a mode and set `used_mode`:
 - `launched_extension` / `launched_runscript` — `ensure_host` starts VEGAS
 - `oneshot_runscript` — generated `.cs` + sibling `.job.json`
 
-See [skills/nle-mcp/SKILL.md](../skills/nle-mcp/SKILL.md).
+See [skills/cutrelay/SKILL.md](../skills/cutrelay/SKILL.md).
 
 ## Non-goals (for now)
 - Full VEGAS UI parity — editing/automation surface, not remote desktop.
@@ -72,7 +72,7 @@ See [skills/nle-mcp/SKILL.md](../skills/nle-mcp/SKILL.md).
 
 ## Multi-editor adapter
 
-- Shared backend protocol under `server/nle_mcp/backends/`.
+- Shared backend protocol under `server/cutrelay/backends/`.
 - FFmpeg headless backend (cut, concat, mix, reframe, render).
 - VEGAS default unchanged for existing installs.
 - Resolve Studio 21.1+ live backend (free edition has no API).

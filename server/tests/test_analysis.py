@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from nle_mcp.analysis.audio import analyze_audio
-from nle_mcp.analysis.captions import generate_captions
-from nle_mcp.analysis.probe import probe_media
-from nle_mcp.analysis.scenes import detect_scenes
-from nle_mcp.analysis.whisper import transcribe_media
-from nle_mcp import find_highlights
+from cutrelay.analysis.audio import analyze_audio
+from cutrelay.analysis.captions import generate_captions
+from cutrelay.analysis.probe import probe_media
+from cutrelay.analysis.scenes import detect_scenes
+from cutrelay.analysis.whisper import transcribe_media
+from cutrelay import find_highlights
 
 
 def test_probe_color_clip(color_clip):

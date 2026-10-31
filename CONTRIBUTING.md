@@ -12,7 +12,7 @@ python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 pytest
-python -m nle_mcp
+python -m cutrelay
 ```
 
 VEGAS live host: [docs/SETUP.md](docs/SETUP.md)
@@ -21,7 +21,7 @@ VEGAS live host: [docs/SETUP.md](docs/SETUP.md)
 2. Prefer `host\build.ps1` (Application Extension auto-start), or copy
    `host/VegasDirectorHost.cs` into a Script Menu folder and run
    *Tools > Scripting > VegasDirectorHost*
-3. `python -m nle_mcp` (`python -m vegas_director_mcp` still works)
+3. `python -m cutrelay` (`python -m vegas_director_mcp` still works)
 
 Python tests (no VEGAS, no Resolve): from `server/`, `pip install -e ".[dev]"`
 then `pytest`. They mock the VEGAS host, inject a fake Resolve API, and

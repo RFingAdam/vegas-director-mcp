@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nle_mcp.analysis.captions import generate_captions
-from nle_mcp.analysis.edit_ops import concat_media, cut_media, mix_audio, normalize_audio, reframe_media
-from nle_mcp.analysis.probe import probe_media
-from nle_mcp.backends import create_backend, editor_from_env, list_editors, reset_backend
-from nle_mcp.backends.ffmpeg import FfmpegBackend
-from nle_mcp import tools
-from nle_mcp.edit.helpers import apply_crossfade
+from cutrelay.analysis.captions import generate_captions
+from cutrelay.analysis.edit_ops import concat_media, cut_media, mix_audio, normalize_audio, reframe_media
+from cutrelay.analysis.probe import probe_media
+from cutrelay.backends import create_backend, editor_from_env, list_editors, reset_backend
+from cutrelay.backends.ffmpeg import FfmpegBackend
+from cutrelay import tools
+from cutrelay.edit.helpers import apply_crossfade
 
 
 def _ffmpeg(monkeypatch) -> FfmpegBackend:
@@ -159,7 +159,7 @@ def test_backend_captions_burn_in(monkeypatch, color_clip, tmp_path):
     assert started["ok"] is True, started
     # Standalone burn-in primitive (same ffmpeg path, no NLE).
     burned = tmp_path / "burned.mp4"
-    from nle_mcp.analysis.captions import burn_captions
+    from cutrelay.analysis.captions import burn_captions
 
     result = burn_captions(str(out), caps["ass_path"], str(burned))
     assert result["ok"] is True
@@ -182,7 +182,7 @@ def test_backend_async_render_status(monkeypatch, color_clip, tmp_path):
 
 
 def test_removed_recipe_stubs():
-    from nle_mcp import apply_vertical_short, propose_edit
+    from cutrelay import apply_vertical_short, propose_edit
 
     assert apply_vertical_short("x", 0, 1)["removed"] is True
     assert propose_edit("x")["removed"] is True

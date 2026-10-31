@@ -1,7 +1,7 @@
 [project]
-name = "nle-mcp"
-version = "0.2.0"
-description = "Editor-agnostic MCP bridge for AI-driven video editing (FFmpeg, VEGAS Pro, DaVinci Resolve)."
+name = "cutrelay-mcp"
+version = "0.3.0"
+description = "CutRelay MCP: editor-agnostic AI video editing over MCP (FFmpeg-first; VEGAS Pro, DaVinci Resolve, OTIO/FCPXML/MLT backends)."
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
@@ -10,8 +10,10 @@ dependencies = [
 ]
 
 [project.scripts]
-nle-mcp = "nle_mcp:main"
-vegas-director-mcp = "nle_mcp:main"
+cutrelay-mcp = "cutrelay:main"
+# Deprecated aliases, kept for one release.
+nle-mcp = "cutrelay:main"
+vegas-director-mcp = "cutrelay:main"
 
 [project.optional-dependencies]
 windows = ["pywin32>=306"]
@@ -27,4 +29,4 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["nle_mcp*", "vegas_director_mcp*"]
+include = ["cutrelay*", "nle_mcp*", "vegas_director_mcp*"]
