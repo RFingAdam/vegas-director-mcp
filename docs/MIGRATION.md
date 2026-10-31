@@ -4,8 +4,11 @@ This public repo is an editor-agnostic MCP bridge, now named **TakeRelay MCP**.
 The Python project is **takerelay-mcp**, the import package is **takerelay**, and
 the MCP server name is **"TakeRelay MCP"**. The project was briefly called
 **CutRelay MCP** (`cutrelay-mcp` / `cutrelay`); it was renamed again because
-the matching .com domain was not available. The GitHub repository name may
-lag behind the package name.
+the matching .com domain was not available. The GitHub repository moved from
+`RFingAdam/vegas-director-mcp` to
+[`RFingAdam/takerelay`](https://github.com/RFingAdam/takerelay); GitHub
+redirects the old URL, but update your remote with
+`git remote set-url origin https://github.com/RFingAdam/takerelay.git`.
 
 ## Package and entry points
 

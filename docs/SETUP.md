@@ -141,9 +141,9 @@ Cursor / Claude Desktop-style config. Use the venv interpreter and the
 {
   "mcpServers": {
     "takerelay-mcp": {
-      "command": "C:\\path\\to\\vegas-director-mcp\\server\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\takerelay\\server\\.venv\\Scripts\\python.exe",
       "args": ["-m", "takerelay"],
-      "cwd": "C:\\path\\to\\vegas-director-mcp\\server",
+      "cwd": "C:\\path\\to\\takerelay\\server",
       "env": {
         "VEGAS_HOST_TRANSPORT": "tcp",
         "VEGAS_HOST_ADDRESS": "127.0.0.1",
@@ -154,7 +154,7 @@ Cursor / Claude Desktop-style config. Use the venv interpreter and the
 }
 ```
 
-Replace `C:\\path\\to\\vegas-director-mcp` with your clone path.
+Replace `C:\\path\\to\\takerelay` with your clone path.
 
 Or, from the repo root after the venv exists:
 

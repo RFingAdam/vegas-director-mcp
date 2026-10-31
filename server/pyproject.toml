@@ -11,6 +11,12 @@ dependencies = [
     "audioop-lts>=0.2.1; python_version >= '3.13'",
 ]
 
+[project.urls]
+Homepage = "https://github.com/RFingAdam/takerelay"
+Repository = "https://github.com/RFingAdam/takerelay"
+Issues = "https://github.com/RFingAdam/takerelay/issues"
+Documentation = "https://github.com/RFingAdam/takerelay#readme"
+
 [project.scripts]
 takerelay-mcp = "takerelay:main"
 # Deprecated aliases, kept for one release.

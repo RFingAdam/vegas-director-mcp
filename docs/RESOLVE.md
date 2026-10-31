@@ -103,9 +103,9 @@ still uses the venv Python; set the three variables above.
 {
   "mcpServers": {
     "takerelay-mcp": {
-      "command": "C:\\path\\to\\vegas-director-mcp\\server\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\takerelay\\server\\.venv\\Scripts\\python.exe",
       "args": ["-m", "takerelay"],
-      "cwd": "C:\\path\\to\\vegas-director-mcp\\server",
+      "cwd": "C:\\path\\to\\takerelay\\server",
       "env": {
         "DIRECTOR_EDITOR": "resolve",
         "RESOLVE_SCRIPT_API": "C:\\ProgramData\\Blackmagic Design\\DaVinci Resolve\\Support\\Developer\\Scripting",

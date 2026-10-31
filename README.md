@@ -2,7 +2,7 @@
 
 **Let an AI agent cut, mix, caption and render video, through FFmpeg, VEGAS Pro, DaVinci Resolve Studio, or plain OTIO/FCPXML/MLT timelines, with one MCP tool set.**
 
-[![CI](https://github.com/RFingAdam/vegas-director-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/RFingAdam/vegas-director-mcp/actions/workflows/ci.yml)
+[![CI](https://github.com/RFingAdam/takerelay/actions/workflows/ci.yml/badge.svg)](https://github.com/RFingAdam/takerelay/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](server/pyproject.toml)
 [![MCP](https://img.shields.io/badge/MCP-stdio-6e56cf.svg)](https://modelcontextprotocol.io)
@@ -73,7 +73,7 @@ Requires Python 3.11+ and `ffmpeg` / `ffprobe` on PATH
 The package is not on PyPI yet, so install from a clone:
 
 ```bash
-git clone https://github.com/RFingAdam/vegas-director-mcp.git takerelay
+git clone https://github.com/RFingAdam/takerelay.git takerelay
 cd takerelay/server
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
