@@ -5,7 +5,7 @@ No GUI NLE. The MCP server keeps an in-memory timeline and encodes with
 
 ```
 DIRECTOR_EDITOR=ffmpeg
-python -m takerelay
+python -m rushcut
 ```
 
 Requires `ffmpeg` and `ffprobe` on PATH (`FFMPEG_BIN` / `FFPROBE_BIN`
@@ -39,7 +39,7 @@ File-level tools (no timeline required):
 ## Example (headless cut)
 
 ```python
-from takerelay.tools import (
+from rushcut.tools import (
     new_project, add_track, add_video_event, trim_event,
     set_project_video, render_start, wait_for_render,
 )

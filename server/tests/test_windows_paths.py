@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from takerelay import host_launch
-from takerelay import windows_paths
+from rushcut import host_launch
+from rushcut import windows_paths
 
 
 def test_my_documents_non_windows_fallback(monkeypatch, tmp_path):

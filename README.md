@@ -1,13 +1,13 @@
-# TakeRelay MCP
+# Rushcut MCP
 
-**Let an AI agent cut, mix, caption and render video, through FFmpeg, VEGAS Pro, DaVinci Resolve Studio, or plain OTIO/FCPXML/MLT timelines, with one MCP tool set.**
+**Rushcut: AI video editing over MCP. Point any agent at your footage; get edits from FFmpeg, VEGAS Pro, DaVinci Resolve or an OTIO/FCPXML/MLT timeline.**
 
-[![CI](https://github.com/RFingAdam/takerelay/actions/workflows/ci.yml/badge.svg)](https://github.com/RFingAdam/takerelay/actions/workflows/ci.yml)
+[![CI](https://github.com/RFingAdam/rushcut/actions/workflows/ci.yml/badge.svg)](https://github.com/RFingAdam/rushcut/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](server/pyproject.toml)
 [![MCP](https://img.shields.io/badge/MCP-stdio-6e56cf.svg)](https://modelcontextprotocol.io)
 
-TakeRelay MCP is a [Model Context Protocol](https://modelcontextprotocol.io)
+Rushcut MCP is a [Model Context Protocol](https://modelcontextprotocol.io)
 server (Python, [FastMCP](https://github.com/jlowin/fastmcp)) that exposes
 **65 video-editing tools** to any MCP client: Claude Code, Claude Desktop,
 Cursor, or anything else that speaks stdio MCP. The same tool names
@@ -26,12 +26,9 @@ editors.
   `analyze_audio`, optional local Whisper) and render checks
   (`verify_output`) let the model check its own work.
 
-> **Name history.** This project was published as `vegas-director-mcp`, then
-> briefly as `nle-mcp` and `CutRelay MCP` (`cutrelay-mcp`). It is now
-> **TakeRelay MCP**: dist `takerelay-mcp`, import `takerelay`. All old import
-> names, `python -m` entry points and console scripts still work for one
-> release (with a `DeprecationWarning` on stderr), and MCP tool names are
-> unchanged. See [docs/MIGRATION.md](docs/MIGRATION.md).
+> **Formerly vegas-director-mcp.** Old import names, `python -m` entry
+> points and console scripts keep working for one release, and MCP tool names
+> are unchanged. See [docs/MIGRATION.md](docs/MIGRATION.md).
 
 **Independent project.** Not affiliated with or endorsed by MAGIX or
 Blackmagic Design. See [NOTICE](NOTICE).
@@ -73,8 +70,8 @@ Requires Python 3.11+ and `ffmpeg` / `ffprobe` on PATH
 The package is not on PyPI yet, so install from a clone:
 
 ```bash
-git clone https://github.com/RFingAdam/takerelay.git takerelay
-cd takerelay/server
+git clone https://github.com/RFingAdam/rushcut.git rushcut
+cd rushcut/server
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e .                   # add ".[whisper]" for local transcription
@@ -83,14 +80,14 @@ pip install -e .                   # add ".[whisper]" for local transcription
 Smoke-test it without an MCP client:
 
 ```bash
-DIRECTOR_EDITOR=ffmpeg python -c "from takerelay.tools import ping; print(ping())"
-# PowerShell: $env:DIRECTOR_EDITOR="ffmpeg"; python -c "from takerelay.tools import ping; print(ping())"
+DIRECTOR_EDITOR=ffmpeg python -c "from rushcut.tools import ping; print(ping())"
+# PowerShell: $env:DIRECTOR_EDITOR="ffmpeg"; python -c "from rushcut.tools import ping; print(ping())"
 ```
 
 Run the server (stdio; your MCP client normally starts it for you):
 
 ```bash
-DIRECTOR_EDITOR=ffmpeg takerelay-mcp      # or: python -m takerelay
+DIRECTOR_EDITOR=ffmpeg rushcut-mcp      # or: python -m rushcut
 ```
 
 Live editors need one more step: VEGAS host install in
@@ -100,14 +97,14 @@ Live editors need one more step: VEGAS host install in
 
 ## Register with your MCP client
 
-Point the client at the venv's Python (or the `takerelay-mcp` script inside
-the venv). Use absolute paths. Replace `/path/to/takerelay` with your clone.
+Point the client at the venv's Python (or the `rushcut-mcp` script inside
+the venv). Use absolute paths. Replace `/path/to/rushcut` with your clone.
 
 **Claude Code** (CLI):
 
 ```bash
-claude mcp add takerelay --env DIRECTOR_EDITOR=ffmpeg -- /path/to/takerelay/server/.venv/bin/python -m takerelay
-# Windows: ... -- C:\path\to\takerelay\server\.venv\Scripts\python.exe -m takerelay
+claude mcp add rushcut --env DIRECTOR_EDITOR=ffmpeg -- /path/to/rushcut/server/.venv/bin/python -m rushcut
+# Windows: ... -- C:\path\to\rushcut\server\.venv\Scripts\python.exe -m rushcut
 ```
 
 **Claude Desktop** (`claude_desktop_config.json`; on Windows
@@ -117,9 +114,9 @@ claude mcp add takerelay --env DIRECTOR_EDITOR=ffmpeg -- /path/to/takerelay/serv
 ```json
 {
   "mcpServers": {
-    "takerelay": {
-      "command": "/path/to/takerelay/server/.venv/bin/python",
-      "args": ["-m", "takerelay"],
+    "rushcut": {
+      "command": "/path/to/rushcut/server/.venv/bin/python",
+      "args": ["-m", "rushcut"],
       "env": { "DIRECTOR_EDITOR": "ffmpeg" }
     }
   }
@@ -128,16 +125,16 @@ claude mcp add takerelay --env DIRECTOR_EDITOR=ffmpeg -- /path/to/takerelay/serv
 
 On Windows you can instead run `py -3 scripts\register_claude.py` from the
 repo root once the venv exists. It backs up the config, writes a
-`"takerelay-mcp"` entry for this checkout, and leaves other entries alone.
+`"rushcut-mcp"` entry for this checkout, and leaves other entries alone.
 
 **Cursor** (`~/.cursor/mcp.json`, or `.cursor/mcp.json` in a project):
 
 ```json
 {
   "mcpServers": {
-    "takerelay": {
-      "command": "/path/to/takerelay/server/.venv/bin/python",
-      "args": ["-m", "takerelay"],
+    "rushcut": {
+      "command": "/path/to/rushcut/server/.venv/bin/python",
+      "args": ["-m", "rushcut"],
       "env": { "DIRECTOR_EDITOR": "ffmpeg" }
     }
   }
@@ -145,12 +142,12 @@ repo root once the venv exists. It backs up the config, writes a
 ```
 
 Restart the client after editing its config. The server shows up as
-**"TakeRelay MCP"**. Existing configs that run `-m cutrelay`,
-`-m vegas_director_mcp` or `-m nle_mcp` keep working; switch them to
-`-m takerelay` when convenient.
+**"Rushcut MCP"**. Existing configs that run an older module name such as
+`-m vegas_director_mcp` keep working; switch them to `-m rushcut` when
+convenient ([docs/MIGRATION.md](docs/MIGRATION.md)).
 
 A ready-made agent skill that explains the typical tool flow lives in
-[skills/takerelay/SKILL.md](skills/takerelay/SKILL.md).
+[skills/rushcut/SKILL.md](skills/rushcut/SKILL.md).
 
 ## Tool catalog
 
@@ -182,14 +179,14 @@ Times on the wire are always **seconds** (`start_seconds`, `length_seconds`).
 ## Example: a headless FFmpeg edit
 
 What an agent does through MCP, shown as the equivalent Python calls
-(`takerelay.tools` is the same layer the MCP tools call):
+(`rushcut.tools` is the same layer the MCP tools call):
 
 ```python
 import os
 os.environ["DIRECTOR_EDITOR"] = "ffmpeg"
 
-from takerelay.analysis.probe import probe_media
-from takerelay.tools import (
+from rushcut.analysis.probe import probe_media
+from rushcut.tools import (
     new_project, set_project_video, add_track, add_video_event,
     trim_event, set_event_fades, render_with_preset,
 )
@@ -218,8 +215,8 @@ The agent can also skip the timeline and work on files directly:
 flowchart LR
     client["MCP client<br/>Claude Code / Desktop / Cursor"] -- "stdio (MCP)" --> server
 
-    subgraph server["TakeRelay MCP server (Python, FastMCP)"]
-        tools["65 MCP tools<br/>takerelay/__init__.py"] --> facade["tools.py"]
+    subgraph server["Rushcut MCP server (Python, FastMCP)"]
+        tools["65 MCP tools<br/>rushcut/__init__.py"] --> facade["tools.py"]
         facade --> select{"DIRECTOR_EDITOR"}
         tools --> analysis["analysis/ + render/<br/>probe, scenes, audio, captions,<br/>file ops, verify, sidecar"]
     end
@@ -237,11 +234,11 @@ flowchart LR
 ```
 
 Every backend implements the same method protocol
-(`server/takerelay/backends/protocol.py`), so `tools.py` never branches on the
+(`server/rushcut/backends/protocol.py`), so `tools.py` never branches on the
 editor. The VEGAS wire format is in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 For VEGAS, `ensure_host` picks a mode and reports it as `used_mode`: `live`
 (host already listening), `launched_extension` / `launched_runscript`
-(TakeRelay starts VEGAS), or `oneshot_runscript` (generated script + job file).
+(Rushcut starts VEGAS), or `oneshot_runscript` (generated script + job file).
 
 ## Configuration
 
@@ -289,7 +286,7 @@ your MCP client config.
   paths the agent passes. Run the server as a user that should have access to
   those files, and review what an agent renders or overwrites.
 - **Resolve** is reached through Blackmagic's own scripting API with
-  External scripting = Local; TakeRelay opens no extra ports for it.
+  External scripting = Local; Rushcut opens no extra ports for it.
 
 ## Troubleshooting
 
@@ -300,8 +297,8 @@ your MCP client config.
 | `-32001 Unauthorized: missing or wrong token` | Extension-mode host. Make sure the server runs as the same Windows user, or set `VEGAS_HOST_TOKEN` to the contents of `%LOCALAPPDATA%\vegas-director-mcp\token`. |
 | Resolve backend says scripting is unavailable | You need Resolve **Studio** 21.1+ with External scripting = Local. The free edition has no API. See [docs/RESOLVE.md](docs/RESOLVE.md). |
 | `transcribe_media` returns a soft failure | Install the extra: `pip install -e ".[whisper]"`. |
-| `ModuleNotFoundError: takerelay` after pulling | Re-run `pip install -e .` in `server/.venv` so the new package and console scripts are registered. |
-| `DeprecationWarning: 'cutrelay' is deprecated` (or `vegas_director_mcp`, `nle_mcp`) | Harmless (stderr only). Switch your client config to `-m takerelay`. |
+| `ModuleNotFoundError: rushcut` after pulling | Re-run `pip install -e .` in `server/.venv` so the new package and console scripts are registered. |
+| `DeprecationWarning: '<old name>' is deprecated` (for example `vegas_director_mcp`) | Harmless (stderr only). Switch your client config to `-m rushcut`. |
 | Transport tools return `unsupported` | Expected on `ffmpeg` and `otio`; there is no playback UI. |
 | Client does not show the server | Use absolute paths for `command`, check the client's MCP log, and restart the client after editing its config. |
 
@@ -312,7 +309,7 @@ OTIO/FCPXML/MLT backends; media grounding, captions, file-level ops; async
 render with presets, ffprobe verification and sidecars; VEGAS dual-mode host
 (extension auto-start or run-script). Next:
 
-- Publish `takerelay-mcp` to PyPI so `pip install takerelay-mcp` works.
+- Publish `rushcut-mcp` to PyPI so `pip install rushcut-mcp` works.
 - VEGAS host marker RPC (markers soft-fail on VEGAS today) and a named-pipe
   listener to match the client transport.
 - More live NLE adapters (survey and candidates in
@@ -339,11 +336,11 @@ If you change a host method or MCP tool, update
 
 | Path | What |
 |---|---|
-| `server/takerelay/` | FastMCP server, tool facade, backends, analysis, render helpers |
-| `server/cutrelay/`, `server/vegas_director_mcp/`, `server/nle_mcp/` | Deprecated aliases for `takerelay` (one release) |
+| `server/rushcut/` | FastMCP server, tool facade, backends, analysis, render helpers |
+| `server/vegas_director_mcp/` and the other legacy alias packages | Deprecated aliases for `rushcut` (one release; see [docs/MIGRATION.md](docs/MIGRATION.md)) |
 | `host/` | VEGAS C# host (`VegasDirectorHost.cs`), Application Extension wrapper, `build.ps1` |
 | `scripts/register_claude.py` | Write a Claude Desktop entry for this checkout (Windows) |
-| `skills/takerelay/SKILL.md` | Agent skill describing the tool flow |
+| `skills/rushcut/SKILL.md` | Agent skill describing the tool flow |
 | `server/tests/` | Mocked hosts and synthetic ffmpeg fixtures |
 | `docs/` | Setup, FFmpeg, Resolve, protocol, API coverage, editors, roadmap, migration, licensing |
 

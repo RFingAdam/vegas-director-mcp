@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from takerelay.backends import reset_backend
-from takerelay.host_client import VegasHostConfig
-from takerelay.session import Session, reset_session
+from rushcut.backends import reset_backend
+from rushcut.host_client import VegasHostConfig
+from rushcut.session import Session, reset_session
 
 
 @pytest.fixture(scope="session")
 def ffmpeg_bin() -> str:
-    from takerelay.analysis.ffmpeg_util import which_ffmpeg
+    from rushcut.analysis.ffmpeg_util import which_ffmpeg
 
     return which_ffmpeg("ffmpeg")
 

@@ -49,7 +49,7 @@ def transcribe_media(
             "ok": False,
             "error": (
                 "faster-whisper is not installed. "
-                "pip install 'takerelay-mcp[whisper]' or pip install faster-whisper"
+                "pip install 'rushcut-mcp[whisper]' or pip install faster-whisper"
             ),
             "available": False,
         }

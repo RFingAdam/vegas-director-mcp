@@ -1,32 +1,32 @@
-# Migration to TakeRelay MCP (from CutRelay MCP / vegas-director-mcp / nle-mcp)
+# Migration to Rushcut MCP (from CutRelay MCP / vegas-director-mcp / nle-mcp)
 
-This public repo is an editor-agnostic MCP bridge, now named **TakeRelay MCP**.
-The Python project is **takerelay-mcp**, the import package is **takerelay**, and
-the MCP server name is **"TakeRelay MCP"**. The project was briefly called
-**CutRelay MCP** (`cutrelay-mcp` / `cutrelay`); it was renamed again because
-the matching .com domain was not available. The GitHub repository moved from
+This public repo is an editor-agnostic MCP bridge, now named **Rushcut MCP**.
+The Python project is **rushcut-mcp**, the import package is **rushcut**, and
+the MCP server name is **"Rushcut MCP"**. Between the two, `main` briefly
+used the name **CutRelay MCP** (`cutrelay-mcp` / `cutrelay`); those names are
+kept as aliases too. The GitHub repository moved from
 `RFingAdam/vegas-director-mcp` to
-[`RFingAdam/takerelay`](https://github.com/RFingAdam/takerelay); GitHub
+[`RFingAdam/rushcut`](https://github.com/RFingAdam/rushcut); GitHub
 redirects the old URL, but update your remote with
-`git remote set-url origin https://github.com/RFingAdam/takerelay.git`.
+`git remote set-url origin https://github.com/RFingAdam/rushcut.git`.
 
 ## Package and entry points
 
 | Old | New |
 |---|---|
-| Project name `cutrelay-mcp` / `vegas-director-mcp` / `nle-mcp` | `takerelay-mcp` |
-| `import cutrelay` / `import vegas_director_mcp` / `import nle_mcp` | `import takerelay` |
-| `python -m cutrelay` / `python -m vegas_director_mcp` / `python -m nle_mcp` | `python -m takerelay` |
-| Console script `cutrelay-mcp` / `vegas-director-mcp` / `nle-mcp` | `takerelay-mcp` |
-| FastMCP name `CutRelay MCP` / `vegas-director-mcp` / `nle-mcp` | `TakeRelay MCP` |
-| `pip install 'cutrelay-mcp[whisper]'` / `pip install 'vegas-director-mcp[whisper]'` | `pip install 'takerelay-mcp[whisper]'` |
-| `skills/cutrelay/SKILL.md` / `skills/nle-mcp/SKILL.md` | `skills/takerelay/SKILL.md` |
+| Project name `cutrelay-mcp` / `vegas-director-mcp` / `nle-mcp` | `rushcut-mcp` |
+| `import cutrelay` / `import vegas_director_mcp` / `import nle_mcp` | `import rushcut` |
+| `python -m cutrelay` / `python -m vegas_director_mcp` / `python -m nle_mcp` | `python -m rushcut` |
+| Console script `cutrelay-mcp` / `vegas-director-mcp` / `nle-mcp` | `rushcut-mcp` |
+| FastMCP name `CutRelay MCP` / `vegas-director-mcp` / `nle-mcp` | `Rushcut MCP` |
+| `pip install 'cutrelay-mcp[whisper]'` / `pip install 'vegas-director-mcp[whisper]'` | `pip install 'rushcut-mcp[whisper]'` |
+| `skills/cutrelay/SKILL.md` / `skills/nle-mcp/SKILL.md` | `skills/rushcut/SKILL.md` |
 
 Compatibility kept for one release (the Python aliases emit a
 `DeprecationWarning` on import, on stderr):
 
 - `import cutrelay`, `import vegas_director_mcp` and `import nle_mcp`
-  (re-export `takerelay`, including submodules such as `cutrelay.tools`)
+  (re-export `rushcut`, including submodules such as `cutrelay.tools`)
 - `python -m cutrelay`, `python -m vegas_director_mcp` and `python -m nle_mcp`
 - console scripts `cutrelay-mcp`, `vegas-director-mcp` and `nle-mcp`
 - every MCP tool name (unchanged)
@@ -45,10 +45,10 @@ Not renamed (on-disk / wire compatibility with installed VEGAS hosts):
 The MCP server name is display-only; clients key servers on whatever label you
 put in your config, so an existing `"vegas-director"` or `"cutrelay-mcp"` entry keeps working as-is.
 After pulling, run `pip install -e .` in `server\.venv` once so the new
-`takerelay` package is registered. To switch, set `args` to `["-m", "takerelay"]`
-(and optionally rename the key to `"takerelay"`), then restart Claude Desktop,
+`rushcut` package is registered. To switch, set `args` to `["-m", "rushcut"]`
+(and optionally rename the key to `"rushcut"`), then restart Claude Desktop,
 Grok, Cursor, or whichever client you use. `scripts/register_claude.py` writes
-a `"takerelay-mcp"` entry and leaves an existing `"vegas-director"` entry alone.
+a `"rushcut-mcp"` entry and leaves an existing `"vegas-director"` entry alone.
 
 Default `DIRECTOR_EDITOR` is still `vegas` so existing VEGAS installs keep
 working. Set `DIRECTOR_EDITOR=ffmpeg` for headless editing.

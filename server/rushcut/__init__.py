@@ -1,6 +1,6 @@
-"""TakeRelay MCP: editor-agnostic FastMCP server for AI-driven video editing.
+"""Rushcut MCP: editor-agnostic FastMCP server for AI-driven video editing.
 
-Run with: python -m takerelay
+Run with: python -m rushcut
 (Deprecated aliases: python -m cutrelay, python -m vegas_director_mcp,
 python -m nle_mcp)
 
@@ -16,7 +16,7 @@ from fastmcp import FastMCP
 
 from . import tools
 
-SERVER_NAME = "TakeRelay MCP"
+SERVER_NAME = "Rushcut MCP"
 # Older names some clients may have keyed their config on. The MCP server
 # name is display-only, so these are documented, not enforced.
 LEGACY_SERVER_NAMES = ("CutRelay MCP", "cutrelay-mcp", "nle-mcp", "vegas-director-mcp", "vegas-director")

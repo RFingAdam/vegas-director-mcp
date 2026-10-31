@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from takerelay.analysis.captions import generate_captions
-from takerelay.analysis.edit_ops import concat_media, cut_media, mix_audio, normalize_audio, reframe_media
-from takerelay.analysis.probe import probe_media
-from takerelay.backends import create_backend, editor_from_env, list_editors, reset_backend
-from takerelay.backends.ffmpeg import FfmpegBackend
-from takerelay import tools
-from takerelay.edit.helpers import apply_crossfade
+from rushcut.analysis.captions import generate_captions
+from rushcut.analysis.edit_ops import concat_media, cut_media, mix_audio, normalize_audio, reframe_media
+from rushcut.analysis.probe import probe_media
+from rushcut.backends import create_backend, editor_from_env, list_editors, reset_backend
+from rushcut.backends.ffmpeg import FfmpegBackend
+from rushcut import tools
+from rushcut.edit.helpers import apply_crossfade
 
 
 def _ffmpeg(monkeypatch) -> FfmpegBackend:
@@ -159,7 +159,7 @@ def test_backend_captions_burn_in(monkeypatch, color_clip, tmp_path):
     assert started["ok"] is True, started
     # Standalone burn-in primitive (same ffmpeg path, no NLE).
     burned = tmp_path / "burned.mp4"
-    from takerelay.analysis.captions import burn_captions
+    from rushcut.analysis.captions import burn_captions
 
     result = burn_captions(str(out), caps["ass_path"], str(burned))
     assert result["ok"] is True
@@ -182,7 +182,7 @@ def test_backend_async_render_status(monkeypatch, color_clip, tmp_path):
 
 
 def test_removed_recipe_stubs():
-    from takerelay import apply_vertical_short, propose_edit
+    from rushcut import apply_vertical_short, propose_edit
 
     assert apply_vertical_short("x", 0, 1)["removed"] is True
     assert propose_edit("x")["removed"] is True

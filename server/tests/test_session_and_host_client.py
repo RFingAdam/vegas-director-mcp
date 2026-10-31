@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 
-from takerelay.host_client import VegasHostClient, VegasHostConfig, _load_host_token
-from takerelay.host_launch import find_vegas_exe, launch_vegas
-from takerelay.oneshot import write_oneshot_job
-from takerelay.session import Session
+from rushcut.host_client import VegasHostClient, VegasHostConfig, _load_host_token
+from rushcut.host_launch import find_vegas_exe, launch_vegas
+from rushcut.oneshot import write_oneshot_job
+from rushcut.session import Session
 
 
 def test_token_from_env(monkeypatch, tmp_path):
@@ -36,7 +36,7 @@ def test_client_includes_token(monkeypatch):
 
 def test_launch_vegas_soft_fails_off_windows(monkeypatch):
     # Force the non-Windows path so this never starts a real VEGAS on a dev box.
-    monkeypatch.setattr("takerelay.host_launch.sys.platform", "linux")
+    monkeypatch.setattr("rushcut.host_launch.sys.platform", "linux")
     result = launch_vegas()
     assert result["ok"] is False
     assert "Windows" in result["error"]

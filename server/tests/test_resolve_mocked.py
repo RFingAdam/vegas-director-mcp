@@ -1,10 +1,10 @@
 """Resolve backend tests. All Resolve objects are fakes — no live app."""
 from __future__ import annotations
 
-from takerelay.backends import reset_backend
-from takerelay.backends.resolve import ResolveBackend
-from takerelay.backends.resolve.connect import FREE_EDITION, SCRIPTING_UNAVAILABLE
-from takerelay import tools
+from rushcut.backends import reset_backend
+from rushcut.backends.resolve import ResolveBackend
+from rushcut.backends.resolve.connect import FREE_EDITION, SCRIPTING_UNAVAILABLE
+from rushcut import tools
 
 from fake_resolve import FakeResolve
 

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from takerelay.analysis.audio import analyze_audio
-from takerelay.analysis.captions import generate_captions
-from takerelay.analysis.probe import probe_media
-from takerelay.analysis.scenes import detect_scenes
-from takerelay.analysis.whisper import transcribe_media
-from takerelay import find_highlights
+from rushcut.analysis.audio import analyze_audio
+from rushcut.analysis.captions import generate_captions
+from rushcut.analysis.probe import probe_media
+from rushcut.analysis.scenes import detect_scenes
+from rushcut.analysis.whisper import transcribe_media
+from rushcut import find_highlights
 
 
 def test_probe_color_clip(color_clip):

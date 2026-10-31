@@ -6,14 +6,14 @@ import warnings
 
 import pytest
 
-from takerelay import tools
-from takerelay.backends import (
+from rushcut import tools
+from rushcut.backends import (
     create_backend,
     editor_from_env,
     list_editors,
     reset_backend,
 )
-from takerelay.backends.vegas import VegasBackend
+from rushcut.backends.vegas import VegasBackend
 
 
 def test_default_editor_is_vegas(monkeypatch):
@@ -63,8 +63,8 @@ def test_vegas_markers_soft_fail(fake_session):
 
 @pytest.mark.parametrize("alias", ["cutrelay", "vegas_director_mcp", "nle_mcp"])
 def test_legacy_import_alias(alias):
-    import takerelay
-    from takerelay.backends import editor_from_env as new_env
+    import rushcut
+    from rushcut.backends import editor_from_env as new_env
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
@@ -73,9 +73,9 @@ def test_legacy_import_alias(alias):
         alias_tools = importlib.import_module(f"{alias}.tools")
 
     assert alias_env is new_env
-    assert alias_tools is takerelay.tools
-    assert legacy.ping is takerelay.ping
-    assert legacy.main is takerelay.main
+    assert alias_tools is rushcut.tools
+    assert legacy.ping is rushcut.ping
+    assert legacy.main is rushcut.main
 
 
 @pytest.mark.parametrize("alias", ["cutrelay", "vegas_director_mcp", "nle_mcp"])
@@ -83,7 +83,7 @@ def test_legacy_import_alias_warns(alias):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         legacy = importlib.import_module(alias)
-    with pytest.warns(DeprecationWarning, match="takerelay"):
+    with pytest.warns(DeprecationWarning, match="rushcut"):
         importlib.reload(legacy)
 
 
@@ -94,10 +94,10 @@ def test_legacy_python_m_entry_point(alias):
 
 
 def test_server_name():
-    import takerelay
+    import rushcut
 
-    assert takerelay.SERVER_NAME == "TakeRelay MCP"
-    assert takerelay.mcp.name == "TakeRelay MCP"
+    assert rushcut.SERVER_NAME == "Rushcut MCP"
+    assert rushcut.mcp.name == "Rushcut MCP"
 
 
 def test_create_backend_resolve_does_not_touch_live_app():

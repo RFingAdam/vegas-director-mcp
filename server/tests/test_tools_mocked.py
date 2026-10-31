@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from takerelay import tools
-from takerelay.render.presets import match_preset
-from takerelay.render.sidecar import verify_output, write_sidecar
+from rushcut import tools
+from rushcut.render.presets import match_preset
+from rushcut.render.sidecar import verify_output, write_sidecar
 
 
 def test_ping_and_host_info(fake_session):
@@ -54,7 +54,7 @@ def test_crossfade_moves_and_fades(fake_session):
         raise AssertionError(method)
 
     host, _ = fake_session(handler)
-    from takerelay.edit.helpers import apply_crossfade
+    from rushcut.edit.helpers import apply_crossfade
 
     result = apply_crossfade(0, 0, 1, seconds=0.5)
     assert result["ok"] is True
@@ -80,7 +80,7 @@ def test_ducking_writes_volume_points(fake_session):
         raise AssertionError(method)
 
     fake_session(handler)
-    from takerelay.edit.helpers import apply_ducking
+    from rushcut.edit.helpers import apply_ducking
 
     result = apply_ducking(0, 1, reduction_db=-9)
     assert result["ok"] is True

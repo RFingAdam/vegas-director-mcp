@@ -1,7 +1,7 @@
 [project]
-name = "takerelay-mcp"
+name = "rushcut-mcp"
 version = "0.4.0"
-description = "TakeRelay MCP: editor-agnostic AI video editing over MCP (FFmpeg-first; VEGAS Pro, DaVinci Resolve, OTIO/FCPXML/MLT backends)."
+description = "Rushcut MCP: editor-agnostic AI video editing over MCP (FFmpeg-first; VEGAS Pro, DaVinci Resolve, OTIO/FCPXML/MLT backends)."
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
@@ -12,17 +12,17 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/RFingAdam/takerelay"
-Repository = "https://github.com/RFingAdam/takerelay"
-Issues = "https://github.com/RFingAdam/takerelay/issues"
-Documentation = "https://github.com/RFingAdam/takerelay#readme"
+Homepage = "https://github.com/RFingAdam/rushcut"
+Repository = "https://github.com/RFingAdam/rushcut"
+Issues = "https://github.com/RFingAdam/rushcut/issues"
+Documentation = "https://github.com/RFingAdam/rushcut#readme"
 
 [project.scripts]
-takerelay-mcp = "takerelay:main"
+rushcut-mcp = "rushcut:main"
 # Deprecated aliases, kept for one release.
-cutrelay-mcp = "takerelay:main"
-nle-mcp = "takerelay:main"
-vegas-director-mcp = "takerelay:main"
+cutrelay-mcp = "rushcut:main"
+nle-mcp = "rushcut:main"
+vegas-director-mcp = "rushcut:main"
 
 [project.optional-dependencies]
 windows = ["pywin32>=306"]
@@ -38,4 +38,4 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["takerelay*", "cutrelay*", "nle_mcp*", "vegas_director_mcp*"]
+include = ["rushcut*", "cutrelay*", "nle_mcp*", "vegas_director_mcp*"]
