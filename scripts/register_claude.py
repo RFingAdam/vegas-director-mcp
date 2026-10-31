@@ -1,4 +1,4 @@
-"""Register cutrelay-mcp as a stdio MCP server in Claude Desktop.
+"""Register takerelay-mcp as a stdio MCP server in Claude Desktop.
 
 Uses the checkout that contains this script. Does not hard-code a user path.
 Restart the Claude desktop app afterwards for the tools to appear.
@@ -48,9 +48,9 @@ def main() -> int:
         data = json.load(fh)
 
     servers = data.setdefault("mcpServers", {})
-    servers["cutrelay-mcp"] = {
+    servers["takerelay-mcp"] = {
         "command": str(venv_python),
-        "args": ["-m", "cutrelay"],
+        "args": ["-m", "takerelay"],
         "cwd": str(server_dir),
         "env": {
             "DIRECTOR_EDITOR": os.environ.get("DIRECTOR_EDITOR", "ffmpeg"),
@@ -67,13 +67,13 @@ def main() -> int:
             "command": str(venv_python),
             "args": ["-m", "vegas_director_mcp"],
             "cwd": str(server_dir),
-            "env": servers["cutrelay-mcp"]["env"],
+            "env": servers["takerelay-mcp"]["env"],
         },
     )
     with cfg.open("w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2)
         fh.write("\n")
-    print(f"registered cutrelay-mcp in {cfg}")
+    print(f"registered takerelay-mcp in {cfg}")
     print(f"backup: {backup}")
     return 0
 

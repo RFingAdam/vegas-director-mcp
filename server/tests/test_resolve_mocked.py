@@ -1,10 +1,10 @@
 """Resolve backend tests. All Resolve objects are fakes — no live app."""
 from __future__ import annotations
 
-from cutrelay.backends import reset_backend
-from cutrelay.backends.resolve import ResolveBackend
-from cutrelay.backends.resolve.connect import FREE_EDITION, SCRIPTING_UNAVAILABLE
-from cutrelay import tools
+from takerelay.backends import reset_backend
+from takerelay.backends.resolve import ResolveBackend
+from takerelay.backends.resolve.connect import FREE_EDITION, SCRIPTING_UNAVAILABLE
+from takerelay import tools
 
 from fake_resolve import FakeResolve
 

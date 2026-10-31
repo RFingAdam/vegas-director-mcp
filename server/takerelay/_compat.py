@@ -1,6 +1,6 @@
-"""Helpers for the deprecated ``vegas_director_mcp`` / ``nle_mcp`` aliases.
+"""Helpers for the deprecated ``cutrelay`` / ``vegas_director_mcp`` / ``nle_mcp`` aliases.
 
-Both old package names re-export :mod:`cutrelay` (including every submodule,
+Every old package name re-exports :mod:`takerelay` (including every submodule,
 so ``from vegas_director_mcp.tools import ping`` keeps working) for one
 release, and emit a :class:`DeprecationWarning` on import.
 """
@@ -13,24 +13,24 @@ import warnings
 
 
 def install_alias(alias: str, *, stacklevel: int = 3) -> None:
-    """Map ``alias`` and ``alias.<sub>`` onto ``cutrelay`` / ``cutrelay.<sub>``."""
+    """Map ``alias`` and ``alias.<sub>`` onto ``takerelay`` / ``takerelay.<sub>``."""
     warnings.warn(
         f"'{alias}' is deprecated and will be removed in a future release; "
-        "import 'cutrelay' (or run 'python -m cutrelay') instead.",
+        "import 'takerelay' (or run 'python -m takerelay') instead.",
         DeprecationWarning,
         stacklevel=stacklevel,
     )
-    import cutrelay
+    import takerelay
 
     pkg = sys.modules[alias]
-    for name, value in vars(cutrelay).items():
+    for name, value in vars(takerelay).items():
         if not name.startswith("_"):
             setattr(pkg, name, value)
-    for mod in pkgutil.walk_packages(cutrelay.__path__, prefix="cutrelay."):
+    for mod in pkgutil.walk_packages(takerelay.__path__, prefix="takerelay."):
         if mod.name.endswith(".__main__"):
             continue
         loaded = importlib.import_module(mod.name)
-        rest = mod.name[len("cutrelay.") :]
+        rest = mod.name[len("takerelay.") :]
         sys.modules[f"{alias}.{rest}"] = loaded
         if "." not in rest:
             setattr(pkg, rest, loaded)

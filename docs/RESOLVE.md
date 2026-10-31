@@ -102,9 +102,9 @@ still uses the venv Python; set the three variables above.
 ```json
 {
   "mcpServers": {
-    "cutrelay-mcp": {
+    "takerelay-mcp": {
       "command": "C:\\path\\to\\vegas-director-mcp\\server\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "cutrelay"],
+      "args": ["-m", "takerelay"],
       "cwd": "C:\\path\\to\\vegas-director-mcp\\server",
       "env": {
         "DIRECTOR_EDITOR": "resolve",
@@ -169,7 +169,7 @@ VEGAS is not required for this path. Free Resolve will fail on step 4 with
    set RESOLVE_SCRIPT_LIB=C:\Program Files\Blackmagic Design\DaVinci Resolve\fusionscript.dll
    set PYTHONPATH=%RESOLVE_SCRIPT_API%\Modules
    .venv\Scripts\activate
-   python -c "from cutrelay.tools import ping, editor_info, get_project_state; print(ping()); print(editor_info()); print(get_project_state())"
+   python -c "from takerelay.tools import ping, editor_info, get_project_state; print(ping()); print(editor_info()); print(get_project_state())"
    ```
 4. `ping` / `editor_info` should show `ok: true`, `editor: resolve`,
    `studio: true`, product containing `Studio`.
